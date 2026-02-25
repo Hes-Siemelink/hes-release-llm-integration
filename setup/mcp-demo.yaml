@@ -345,8 +345,9 @@ spec:
     scriptUsername: admin
     scriptUserPassword: admin
 
-  - template: Compare LLM Summaries
+  - template: LLM Shoot-out
     defaultTargetFolder: AI Demo
+    allowTargetFolderOverride: false
     phases:
       - phase: Compare and judge
         tasks:
