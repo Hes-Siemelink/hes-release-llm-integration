@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+import re
 
 from src.llm_prompt import create_model, markdown_quote, format_exception
 from src.http_auth import create_auth_headers
@@ -58,9 +59,28 @@ class LlmAgent(BaseTask):
 
 async def send_prompt(prompt, model, mcp_servers):
     client = MultiServerMCPClient(mcp_servers)
-    tools = await client.get_tools()
-    system_prompt = """
+
+    tools = []
+    server_descriptions = []
+    for server_name in mcp_servers:
+        server_tools = await client.get_tools(server_name=server_name)
+        prefix = re.sub(r"[^\w]+", "_", server_name.lower())
+        for tool in server_tools:
+            tool_copy = tool.model_copy()
+            tool_copy.name = f"{prefix}__{tool.name}"
+            tools.append(tool_copy)
+        server_descriptions.append(f"- '{server_name}' (tool prefix: '{prefix}__')")
+
+    servers_info = "\n    ".join(server_descriptions)
+    system_prompt = f"""
     You are an AI assistant in the DevOps domain and are running inside the Digital.ai Release product as a task.
+
+    You have access to the following MCP servers:
+    {servers_info}
+
+    All tool names follow the [server_prefix]__[tool_name] convention. Match the tool's prefix to the specific service required for the task.
+    (e.g. 'release_mcp__list_releases' vs 'github_mcp__list_releases').
+
     If you need more information from the user to complete a task, you must end your response with the 🙋🏻emoji to prompt the user for more information.
     Do not use the 🙋🏻 emoji  in other cases, since it will fail the task and disrupt the release flow.
     """

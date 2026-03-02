@@ -9,6 +9,7 @@ spec:
   - name: Agility MCP Server
     type: community-llm.McpServer
     url: https://api.staging.digital.ai/agilitymcp/v1/mcp
+    authenticationMethod: None
     headers:
       X-Agility-Bearer: !value AGILITY_KEY
       X-Agility-Host: https://www7.v1host.com/V1Production
@@ -16,12 +17,13 @@ spec:
   - name: Release MCP Server
     type: community-llm.McpServer
     url: http://host.docker.internal:8000/mcp
+    authenticationMethod: None
 
   - name: GitHub MCP Server
     type: community-llm.McpServer
     url: https://api.githubcopilot.com/mcp/
-    headers:
-      Authorization: !value GITHUB_TOKEN
+    authenticationMethod: Bearer
+    password: !value GITHUB_TOKEN
 
     # AI Models
   - name: Gemini 2.5 Pro
@@ -300,8 +302,6 @@ spec:
             type: community-llm.LlmAgent
             description: |-
               Attempt to make the agent "create a ticket for the last release that failed"
-              
-              ⚠️ Not working yet. The agent / models seem to get very confused and tend to give up.
             prompt: |-
               List all releases in Digital.ai Release.
               
@@ -344,6 +344,111 @@ spec:
             owner: admin
     scriptUsername: admin
     scriptUserPassword: admin
+
+  - template: 6.  Adaptive Orchestration example
+    description: |
+       "Demonstrates adaptive orchestration in Digital.ai Release by intentionally
+       failing a task, introducing an AI Agent into the running release to assess the
+       failure and generate a targeted remediation plan."
+    phases:
+      - phase: Prompt
+        tasks:
+          - name: Simulated MCP failure
+            type: community-llm.McpCallTool
+            description: "A demo task that triggers a predictable MCP tool-not-found error\
+              \ to exercise the release pipeline's failure recovery path. The attached failure\
+              \ handler script injects an AI Agent task dynamically into the current phase,\
+              \ which then generates context-aware mitigation steps. Together, these form\
+              \ a live demonstration of adaptive orchestration — the pipeline reacts intelligently\
+              \ to its own failures."
+            failureHandler: |-
+              # Create LLM Agent task
+              agent_task = taskApi.newTask("community-llm.LlmAgent")
+              agent_task.title = "Adaptive Recovery Agent"
+              agent_task.description = "AI-driven recovery for failed task: %s" % task.title
+              agent_task.owner = task.owner
+
+              # --- Set CI References ---
+              folder_id = release.folderId
+
+              configs = configurationApi.searchByTypeAndTitle(
+                  "community-llm.McpServer",
+                  "Release MCP Server",
+                  folder_id
+              )
+
+              if configs and len(configs) > 0:
+                  agent_task.mcpServer1 = configs[0]
+              else:
+                  raise Exception("'Release MCP Server configuration' not found in this folder")
+
+              # replace with your model information
+              configs = configurationApi.searchByTypeAndTitle(
+                  "community-llm.DaiLlmModel",
+                  "Anthropic Sonnet 4.5",
+                  folder_id
+              )
+
+              if configs and len(configs) > 0:
+                  agent_task.model = configs[0]
+              else:
+                  raise Exception("'Anthropic Sonnet 4.5 configuration' not found in this folder")
+
+              # --- Prompt ---
+              prompt_text = """
+              You are an autonomous Release Recovery Agent.
+
+              A task has failed.
+
+              FAILED_TASK_ID: %s
+
+              You have access to Release MCP and other configured MCP tools.
+
+              Objectives:
+              1. Retrieve the failed task details and last comment.
+              2. Extract and analyze the failure message.
+              3. Classify the failure.
+              4. Determine mitigation steps.
+
+              Rules:
+              - Do NOT retry failed tasks unless clearly intermittent connectivity.
+              - Do NOT modify production infrastructure automatically.
+              - Do NOT create duplicate mitigation tasks.
+              - Maximum mitigation tasks allowed: 5.
+              - Never create another LLM Agent task.
+              - Do NOT user download_file or download_attachemen or complete_task tools.
+
+              If mitigation is required:
+              - Create a NEW phase named:
+                "Adaptive Recovery "
+              - The FIRST task must be:
+                Manual Task
+                Title: "Approve Adaptive Recovery Plan"
+                Assigned to Release Owner
+              - All mitigation tasks must be placed after the approval task.
+
+              Perform actions directly using MCP tools.
+              Do not output explanations.
+              """ % (task.id)
+
+              agent_task.prompt = prompt_text
+
+              # Add task to release
+              created_agent = taskApi.addTask(phase.id, agent_task)
+
+              taskApi.skipTask(task.id, 'skip and let the AI Agent handle the failure')
+
+              print("Adaptive Recovery Agent created:", created_agent.id)
+            taskFailureHandlerEnabled: true
+            taskRecoverOp: RUN_SCRIPT
+            capabilities:
+              - remote
+            server: Release MCP Server
+            tool: unavailable_tool
+            input: "{}"
+    scriptUsername: !value "RELEASE_SCRIPT_USERNAME"
+    scriptUserPassword: !value "RELEASE_SCRIPT_PASSWORD"
+    riskProfile: Default risk profile
 
   - template: LLM Shoot-out
     defaultTargetFolder: AI Demo
