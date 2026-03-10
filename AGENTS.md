@@ -1,57 +1,73 @@
-# MCP Client Task & Agent Summary
+# Code Agent Release Plugin
 
-This repository contains a Digital.ai Release integration plugin (container-based) whose purpose is to demonstrate how
-to implement tasks and (specifically) an MCP Client task that can connect to a Model Context Protocol (MCP) ticket
-server and invoke its tools (e.g. `list_tickets`).
+This repository contains a Digital.ai Release integration plugin (container-based) that uses OpenCode to implement
+beads (work items) and create GitHub pull requests.
 
-The project started from the official template (see the separate workshop repository `release-integration-sdk-workshop`)
-and keeps the standard build and packaging layout:
+## Project Structure
 
-* `resources/type-definitions.yaml` – Defines the task types exposed in Release.
-* `src/` – Python implementation classes (subclassing `digitalai.release.integration.BaseTask`).
-* `tests/` – Unit tests (fast feedback loop without installing the plugin into Release).
-* `dev-environment/` – Docker Compose resources for running a local Release development server.
+* `resources/type-definitions.yaml` -- Defines the task types exposed in Release (prefix: `code-agent.`).
+* `src/` -- Python implementation classes (subclassing `digitalai.release.integration.BaseTask`).
+* `tests/` -- Unit tests (103 tests, all using `unittest` + `unittest.mock`).
+* `dev-environment/` -- Docker Compose resources for running a local Release development server.
+* `resources/container-AGENTS.md` -- AGENTS.md template injected into workspaces at runtime.
+* `resources/container-opencode.json` -- OpenCode config for container execution.
 
-## Fast Overview of Digital.ai Release Integration Plugin Lifecycle
+## Source Modules
 
-1. Define or update task metadata in `resources/type-definitions.yaml` (names map to Python classes with identical
-   simple names).
-2. Implement or adjust Python task code under `src/`.
-3. Add / refine unit tests under `tests/` for quick iteration.
-4. Build the plugin + container image: `sh build.sh --upload` (or the Windows script) – publishes the image to the local
-   registry and produces a plugin ZIP.
-5. Install/refresh in the local Release instance using the wrapper script
-   `./xlw plugin release install --file build/<artifact>.zip`.
-6. Run/observe tasks in the Release UI (activity log, outputs, failures, etc.).
+| Module | Class | Purpose |
+|--------|-------|---------|
+| `src/create_pull_request.py` | `CreatePullRequest` | Main 4-phase pipeline: setup, code, question loop, deliver |
+| `src/beads_client.py` | `BeadsClient` | Python wrapper for bd CLI (show/update/create/close beads, comments, sync) |
+| `src/git_ops.py` | (functions) | Git and GitHub CLI operations (clone, branch, commit, push, create PR) |
+| `src/opencode_runner.py` | (functions) | OpenCode headless invocation, prompt composition, needs-answer detection |
+| `src/agents_md.py` | (functions) | AGENTS.md template injection and cleanup for workspaces |
+| `src/beads_test_connection.py` | `BeadsTestConnection` | Test connection script for BeadsServer config |
+| `src/llm_test_connection.py` | `LLMTestConnection` | Test connection script for LLMServer config |
+
+## Type Definitions (prefix: `code-agent.`)
+
+* `code-agent.BeadsServer` -- Configuration type for beads server connection
+* `code-agent.LLMServer` -- Configuration type for LLM provider (Anthropic/OpenAI)
+* `code-agent.CreatePullRequest` -- Container task: implement a bead and create a PR
+* `code-agent.BeadsTestConnection` -- Test connection script for BeadsServer
+* `code-agent.LLMTestConnection` -- Test connection script for LLMServer
+
+## Running Tests
+
+Use `unittest` (not pytest -- langsmith plugin crashes on Python 3.12):
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Or run specific test modules:
+
+```bash
+python3 -m unittest tests.test_create_pull_request tests.test_beads_client tests.test_git_ops -v
+```
+
+## Build
+
+```bash
+sh build.sh --upload
+```
 
 ## Adding a new task
 
-These are the instructions for adding a new task.
+1. Add a new entry in `resources/type-definitions.yaml` (copy an existing one and adjust).
+2. Create a new Python class in `src/` with the same name as the type suffix (e.g., `MyTask` for `code-agent.MyTask`).
+3. Implement the `execute()` method (read `self.input_properties`, write `self.set_output_property()`).
+4. Add unit tests in `tests/`.
 
-The basic steps are:
+## SDK Patterns
 
-1. Add a new entry in `resources/type-definitions.yaml` (copy an existing one and adjust the name, input/output
-   properties, etc.).
-2. Create a new Python class in `src/` with the same name as the task type (e.g. `MyTask` for a task type
-   `MyTask`).
-3. Implement the `execute()` method of the class (access input properties via `self.input_properties` and set output
-   properties via `self.set_output_property()`).
-4. Add unit tests in `tests/` (copy an existing test case and adjust it).
-
-You need to know the following and you may ask the user if you don't have this information:
-
-1. Task name and prefix. For example `release.TaskName` where `release` is the prefix.
-2. One input property and its type. For example `name` of type `string`.
-3. One output property and its type. For example `result` of type `string
-
-## Adding an exisiting server to a task
-
-If you want to add an existing server to a task, you need to do the following
-
-1. Find the server definition in `resources/type-definitions.yaml` (e.g. `MCPServer`).
-2. Add a `server` property to the task definition in `resources/type-definitions.yaml` that references the server
-   definition. This must be an input property
-3. In the Python class, access the server configuration via `
+* Tasks extend `digitalai.release.integration.BaseTask`
+* Read inputs: `self.input_properties["key"]`
+* Write outputs: `self.set_output_property("key", value)`
+* Log to activity: `self.add_comment("message")`
+* Status line: `self.set_status_line("Phase: setup")`
+* Server configs use `kind: ci` with `referenced-type` to reference `xlrelease.Configuration` subtypes
+* Class name must match the type suffix (e.g., `code-agent.CreatePullRequest` -> class `CreatePullRequest`)
 
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
@@ -128,13 +144,13 @@ bd automatically syncs via Dolt:
 
 ### Important Rules
 
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
+- Use bd for ALL task tracking
+- Always use `--json` flag for programmatic use
+- Link discovered work with `discovered-from` dependencies
+- Check `bd ready` before asking "what should I work on?"
+- Do NOT create markdown TODO lists
+- Do NOT use external issue trackers
+- Do NOT duplicate tracking systems
 
 For more details, see README.md and docs/QUICKSTART.md.
 

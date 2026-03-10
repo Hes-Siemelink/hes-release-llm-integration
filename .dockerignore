@@ -10,3 +10,7 @@ dev-environment/
 .idea/
 build/
 tests/
+.beads/
+.venv/
+opencode.json
+AGENTS.md

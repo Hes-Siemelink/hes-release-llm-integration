@@ -2,255 +2,97 @@
 #
 # Yaml-based format to define types in Release, as an alternative to synthetic.xml or type-definitions.xml
 # This format is in Tech Preview in Release 23.3 and may change in future versions.
-#
-# You can also use synthetic.xml or type-definitions.xml to define types. Note that contents of the two files
-# are merged. This means that you can't have the same type definition in both
-# type-definitions.yaml and synthetic.xml or type-definitions.xml at the same time.
 
 types:
 
   #
-  # MCP
+  # Configuration: Beads Server
   #
 
-  # MCP Server
-
-  community-llm.McpServer:
-    extends: configuration.ContainerHttpConnection
-    label: "MCP: Server"
-    description: MCP Server configuration
-    
-    properties:
-      url:
-        description: The target MCP Server URL
-        required: true
-      authenticationMethod:
-        description: The authentication method to use
-        kind: enum
-        required: false
-        enum-class: com.xebialabs.xlrelease.domain.configuration.HttpConnection$AuthenticationMethod
-        enum-values:
-          - None
-          - Basic
-          - Bearer
-          - PAT
-      transport:
-        label: Transport Protocol
-        description: The transport protocol to use
-        kind: enum
-        default: http
-        enum-values:
-          - http
-          - sse
-      headers:
-        description: Additional HTTP headers to include in requests
-        kind: map_string_string
-        required: false
-
-    hidden-properties:
-      testConnectionScript: community-llm.McpTestConnection
-
-  # MCP tasks
-
-  community-llm.McpBaseTask:
-    extends: xlrelease.ContainerTask
-    virtual: true
-
-    hidden-properties:
-      image:
-        default: "@registry.url@/@registry.org@/@project.name@:@project.version@"
-        transient: true
-      iconLocation: mcp.png
-      taskColor: "#5F5FFF"
-
-    input-properties:
-      server:
-        description: The MCP server
-        kind: ci
-        referenced-type: community-llm.McpServer
-
-  community-llm.McpCallTool:
-    extends: community-llm.McpBaseTask
-    label: "MCP: Call Tool"
-    description: Calls an MCP tool
-
-    input-properties:
-      tool:
-        description: The name of the tool to call
-        kind: string
-        input-hint:
-          method-ref: tool-lookup
-
-      input:
-        description: The input as a JSON string
-        kind: string
-        size: large
-        required: false
-
-      timeout:
-        label: Timeout
-        description: Tool execution timeout in seconds
-        kind: integer
-        default: 300
-        required: false
-
-    output-properties:
-      result:
-        kind: string
-
-    methods:
-      tool-lookup:
-        delegate: remoteScriptLookup
-        script: community-llm.McpToolLookupScript
-        containerConnection: server
-
-  community-llm.McpListToolsTask: # suffixed with "Task" to avoid name clash with OpenAI type
-    extends: community-llm.McpBaseTask
-    label: "MCP: List Tools"
-    description: Lists available tools on the MCP server
-
-    output-properties:
-      tools:
-        label: Tool definitions
-        description: The available tools on the MCP server and their descriptions
-        kind: map_string_string
-
-      inputSchema:
-        label: Input schema
-        description: The input schema for each tool
-        kind: map_string_string
-
-  # MCP Scripts
-
-  community-llm.McpBaseScript:
-    extends: xlrelease.RemoteScriptExecution
-    virtual: true
-
-    hidden-properties:
-      image:
-        default: "@registry.url@/@registry.org@/@project.name@:@project.version@"
-        transient: true
-
-    output-properties:
-      commandResponse:
-        kind: map_string_string
-
-  community-llm.McpTestConnection:
-    extends: community-llm.McpBaseScript
-
-    input-properties:
-      server:
-        kind: ci
-        referenced-type: community-llm.McpServer
-
-  community-llm.McpToolLookupScript:
-    extends: community-llm.McpBaseScript
-
-    input-properties:
-      _ci:
-        kind: ci
-        referenced-type: community-llm.McpBaseTask
-      _attributes:
-        kind: map_string_string
-      _parameters:
-        kind: ci
-        referenced-type: udm.Parameters
-
-  #
-  # AI Models
-  #
-
-  community-llm.BaseModel:
+  code-agent.BeadsServer:
     extends: xlrelease.Configuration
-    virtual: true
+    label: "Code Agent: Beads Server"
+    description: Connection to a beads issue tracking server (Dolt-backed)
 
     hidden-properties:
-      testConnectionScript: community-llm.LlmTestConnection
+      testConnectionScript: code-agent.BeadsTestConnection
 
     properties:
-      apiKey:
-        label: API Key
-        description: API Key for the LLM provider
+      host:
+        label: Server Host
+        description: Hostname of the Dolt SQL server running the beads database
+        kind: string
+        default: beads-server
         required: true
-        password: true
-      model_id:
-        label: AI Model
-        description: The model to use
-        kind: string
-
-  community-llm.GeminiModel:
-    extends: community-llm.BaseModel
-    label: "AI Model: Gemini"
-
-    hidden-properties:
-      provider:
-        default: gemini
-
-    properties:
-      apiKey:
-        label: Gemini API Key
-        description: API Key for Google Gemini
+      port:
+        label: Server Port
+        description: Port of the Dolt SQL server
+        kind: integer
+        default: 3306
         required: true
-        password: true
-      model_id:
-        label: Model
-        description: The model to use
+      projectId:
+        label: Project ID
+        description: The beads project ID (from .beads/metadata.json on the host)
         kind: string
-        default: gemini-2.5-flash
-
-  community-llm.OpenAiModel:
-    extends: community-llm.BaseModel
-    label: "AI Model: OpenAI"
-
-    hidden-properties:
-      provider:
-        default: openai
-
-    properties:
-      url:
-        label: API URL
-        description: The URL to each the OpenAI API
-        kind: string
-        default: https://api.openai.com/v1
-      apiKey:
-        label: API Key
-        description: API Key for the LLM provider
         required: true
-        password: true
-      model_id:
-        label: Model
-        description: The model to use
+      prefix:
+        label: Issue Prefix
+        description: Prefix for bead IDs (e.g., 'bc' produces bc-42)
         kind: string
-
-  community-llm.DaiLlmModel:
-    extends: community-llm.BaseModel
-    label: "AI Model: Digital.ai LLM"
-
-    hidden-properties:
-      provider:
-        default: dai-llm
-
-    properties:
-      url:
-        label: API URL
-        description: The URL to each the Digital.ai LLM Service
+        default: bc
+      syncMode:
+        label: Sync Mode
+        description: How the container communicates with the beads server
+        kind: enum
+        default: direct
+        enum-values:
+          - direct
+          - dolt
+      actor:
+        label: Actor Name
+        description: Name used for git commits and bead audit trail
         kind: string
-        default: https://api.staging.digital.ai/llm
-      apiKey:
-        label: API Key
-        description: API Key for the LLM provider
-        required: true
-        password: true
-      model_id:
-        label: Model
-        description: The model to use
-        kind: string
+        default: beads-coder
 
   #
-  # LLM tasks
+  # Configuration: LLM Model
   #
 
-  community-llm.BasePrompt:
+  code-agent.LLMServer:
+    extends: xlrelease.Configuration
+    label: "Code Agent: LLM Model"
+    description: LLM provider configuration for the OpenCode coding agent
+
+    hidden-properties:
+      testConnectionScript: code-agent.LLMTestConnection
+
+    properties:
+      provider:
+        label: Provider
+        description: The LLM provider
+        kind: enum
+        default: anthropic
+        required: true
+        enum-values:
+          - anthropic
+          - openai
+      apiKey:
+        label: API Key
+        description: API key for the LLM provider
+        kind: string
+        password: true
+        required: true
+      model:
+        label: Model
+        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o). Leave empty for provider default.
+        kind: string
+        required: false
+
+  #
+  # Base Task
+  #
+
+  code-agent.BaseTask:
     extends: xlrelease.ContainerTask
     virtual: true
 
@@ -258,114 +100,122 @@ types:
       image:
         default: "@registry.url@/@registry.org@/@project.name@:@project.version@"
         transient: true
-      iconLocation: prompt.png
-      taskColor: "#C88BFF"
+      iconLocation: opencode.png
+      taskColor: "#1A7F37"
 
-  community-llm.LlmPrompt:
-    extends: community-llm.BasePrompt
-    label: "AI: Prompt"
-    description: Sends a single prompt to an LLM service
+  #
+  # Task: Create Pull Request
+  #
 
-    input-properties:
-      prompt:
-        description: The prompt to be answered by the AI model
-        kind: string
-        size: large
-      model:
-        description: The reasoning model to use
-        kind: ci
-        referenced-type: community-llm.BaseModel
-
-    output-properties:
-      response:
-        description: The AI response
-        kind: string
-
-  community-llm.LlmChat:
-    extends: community-llm.BasePrompt
-    label: "AI: Chat"
-    description: Chats with the LLM. Send 'Stop chat' to end the chat
+  code-agent.CreatePullRequest:
+    extends: code-agent.BaseTask
+    label: "Code Agent: Create Pull Request"
+    description: Uses OpenCode AI agent to implement a bead story and create a pull request
 
     input-properties:
-      model:
-        description: The LLM model to use
+      beadsServer:
+        label: Beads Server
+        description: The beads server connection
         kind: ci
-        referenced-type: community-llm.BaseModel
-      maxIdleTimeout:
-        description: Idle time in seconds before chat termination
+        referenced-type: code-agent.BeadsServer
+
+      beadId:
+        label: Bead ID
+        description: The bead ID to work on (e.g., bc-42)
+        kind: string
+        required: true
+
+      repoUrl:
+        label: Repository URL
+        description: GitHub repository URL to clone
+        kind: string
+        required: true
+
+      repoBranch:
+        label: Base Branch
+        description: The branch to create the feature branch from
+        kind: string
+        default: main
+
+      githubToken:
+        label: GitHub Token
+        description: GitHub personal access token (needs repo and PR permissions)
+        kind: string
+        password: true
+        required: true
+
+      llmServer:
+        label: LLM Model
+        description: The LLM model configuration for OpenCode
+        kind: ci
+        referenced-type: code-agent.LLMServer
+
+      opencodeTimeout:
+        label: OpenCode Timeout
+        description: Maximum time in seconds for OpenCode to run
         kind: integer
-        default: 300
+        default: 1800
+        required: false
+
+      questionTimeout:
+        label: Question Timeout
+        description: Maximum time in seconds to wait for answers to agent questions
+        kind: integer
+        default: 3600
+        required: false
+
+      maxQuestionRounds:
+        label: Max Question Rounds
+        description: Maximum number of question-answer round trips
+        kind: integer
+        default: 5
         required: false
 
     output-properties:
-      response:
-        description: The AI response
+      prUrl:
+        label: Pull Request URL
+        description: URL of the created pull request
         kind: string
 
-
-  community-llm.LlmAgent:
-    extends: xlrelease.ContainerTask
-    label: "AI: Agent"
-    description: Asks AI agent to do something with multiple MCP server support
-
-    hidden-properties:
-      image:
-        default: "@registry.url@/@registry.org@/@project.name@:@project.version@"
-        transient: true
-      iconLocation: agent.png
-      taskColor: "#EE9037"
-
-    input-properties:
-      prompt:
-        description: The prompt to send to the agent
+      branchName:
+        label: Branch Name
+        description: Name of the feature branch that was created
         kind: string
-        size: large
-      model:
-        description: The reasoning model to use
-        kind: ci
-        referenced-type: community-llm.BaseModel
-      mcpServer1:
-        label: MCP Server 1
-        description: An MCP server that can be used by the agent
-        kind: ci
-        referenced-type: community-llm.McpServer
-      mcpServer2:
-        label: MCP Server 2
-        description: An MCP server that can be used by the agent
-        kind: ci
-        referenced-type: community-llm.McpServer
-      mcpServer3:
-        label: MCP Server 3
-        description: An MCP server that can be used by the agent
-        kind: ci
-        referenced-type: community-llm.McpServer
 
-    output-properties:
-      result:
-        description: The result returned by the agent
+      beadStatus:
+        label: Bead Status
+        description: Final status of the bead after task completion
         kind: string
 
   #
-  # LLM scripts
+  # Scripts
   #
 
-  community-llm.LlmBaseScript:
+  code-agent.BaseScript:
     extends: xlrelease.RemoteScriptExecution
     virtual: true
+
     hidden-properties:
       image:
         default: "@registry.url@/@registry.org@/@project.name@:@project.version@"
         transient: true
+
     output-properties:
       commandResponse:
         kind: map_string_string
-      errorMessage:
-        kind: map_string_string
 
-  community-llm.LlmTestConnection:
-    extends: community-llm.LlmBaseScript
+  code-agent.BeadsTestConnection:
+    extends: code-agent.BaseScript
 
     input-properties:
       server:
         kind: ci
-        referenced-type: community-llm.BaseModel
+        referenced-type: code-agent.BeadsServer
+
+  code-agent.LLMTestConnection:
+    extends: code-agent.BaseScript
+
+    input-properties:
+      server:
+        kind: ci
+        referenced-type: code-agent.LLMServer

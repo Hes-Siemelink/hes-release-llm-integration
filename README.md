@@ -1,198 +1,128 @@
-# AI tasks for Digital.ai Release
+# Code Agent for Digital.ai Release
 
-Create AI-powered automation workflows in Release!
+A Digital.ai Release container plugin that uses [OpenCode](https://opencode.ai) to implement
+[beads](https://github.com/steveyegge/beads) (work items) and create GitHub pull requests -- directly
+from your release pipelines.
 
-This integration provides tasks for Release to interact with LLMs like OpenAI and Gemini and interact with any MCP
-servers.
+## What it does
 
-* Create AI agents that perform complex tasks using MCP tools
-* Call services directly using MCP, without writing any code
-* Embed AI prompts in your Release workflows
-* Start interactive chats with the LLM of your choice
-* Connect to Gemini and OpenAI-compatible providers
-* Connect to any MCP server
-* Mix and match MCP servers and reasoning models per task, to get the right tool for the job
+Given a bead ID, the plugin:
 
-## Tasks
+1. **Claims the bead** and clones the target repository
+2. **Runs OpenCode** headlessly to implement the story described in the bead
+3. **Handles questions** -- if OpenCode needs clarification, it creates a question bead and polls for answers
+4. **Delivers a PR** -- commits, pushes, creates a GitHub pull request, and updates the bead with the PR link
 
-### AI: Agent
+No LangChain, no complex LLM libraries -- just a Python harness that shells out to `opencode`, `git`, `gh`, and `bd`.
 
-Creates an AI agent that can use MCP tools to accomplish tasks.
+## Task: Code Agent: Create Pull Request
 
-![AI Agent Task](setup/images/agent-task-report-failed-releases.png)
+### Input Properties
 
-### AI: Prompt
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| Beads Server | CI config | Yes | -- | Connection to the beads server (host, port, project ID) |
+| Bead ID | string | Yes | -- | The bead to implement (e.g., `bc-42`) |
+| Repository URL | string | Yes | -- | GitHub repository URL to clone |
+| Base Branch | string | No | `main` | Branch to create the feature branch from |
+| GitHub Token | password | Yes | -- | GitHub PAT with repo and PR permissions |
+| LLM Model | CI config | Yes | -- | LLM provider configuration (Anthropic or OpenAI) |
+| OpenCode Timeout | integer | No | 1800 | Max seconds for OpenCode to run |
+| Question Timeout | integer | No | 3600 | Max seconds to wait for question answers |
+| Max Question Rounds | integer | No | 5 | Max question-answer round trips |
 
-Connect to an AI server and invoke a single prompt. Supports Gemini and OpenAI-compatible LLM providers.
+### Output Properties
 
-![AI Prompt Task](setup/images/prompt-task-say-hello.png)
+| Property | Type | Description |
+|----------|------|-------------|
+| Pull Request URL | string | URL of the created PR |
+| Branch Name | string | Feature branch name (e.g., `beads/bc-42`) |
+| Bead Status | string | Final status: `pr-created` or `no-changes` |
 
-### AI: Chat
+## Configuration Types
 
-Interactive chat with an LLM, inside the task's Activity section.
+### Code Agent: Beads Server
 
-![AI Chat Task](setup/images/chat-task.png)
+Connection to a Dolt SQL server running the beads database.
 
-### MCP: Call tool
+- **Host** -- Hostname of the Dolt server (default: `beads-server`)
+- **Port** -- Dolt SQL server port (default: `3306`)
+- **Project ID** -- The beads project ID (from `.beads/metadata.json`)
+- **Prefix** -- Bead ID prefix (default: `bc`)
+- **Sync Mode** -- `direct` (SQL) or `dolt` (push/pull)
+- **Actor** -- Name for git commits and audit trail (default: `beads-coder`)
 
-Connect to any MCP server and invoke its tools. No LLM reasoning, just direct tool calls.
+### Code Agent: LLM Model
 
-![MCP Call Tool Task](setup/images/mcp-task-read-github-issue.png)
+LLM provider configuration for OpenCode.
 
-### MCP: List Tools
-
-Lists available tools on an MCP server
-
-![MCP List Tool Task](setup/images/mcp-task-list-release-tools.png)
-
-## Demo templates
-
-This repo comes with example templates showing how to use the tasks.
-
-1. **MCP Examples** -- Demonstrates the MCP tool tasks that allows you to interact with 3rd party servers without having
-   to write an integration plugin. (no LLM involved).
-2. **Prompt examples** -- Demonstrates the AI Prompt task with different model providers (Gemini, OpenAI, etc).
-3. **MCP + Prompt examples** -- Demonstrates how to combine MCP and Prompt tasks to build AI-powered workflows.
-4. **Agent examples** -- Demonstrates the AI Agent task that combines LLM prompting with multiple MCP servers.
-5. **Interactive Chat example** -- Demonstrates the interactive AI Chat task.
-
-See the **Build & Run** section on how to install the examples.
-
-![Demo templates](setup/images/demo-templates.png)
-
-![An example template](setup/images/template-example.png)
-
+- **Provider** -- `anthropic` or `openai`
+- **API Key** -- Provider API key
+- **Model** -- Model identifier (e.g., `claude-sonnet-4-20250514`). Leave empty for provider default.
 
 ---
 
-# Build & Run
+## Build & Run
 
-This section explains how to set up a local Release instance with the plugin and upload the example templates.
+### Prerequisites
 
-## Prerequisites
+- Python 3.11+
+- Docker
+- Add to `/etc/hosts`: `127.0.0.1 container-registry`
 
-You need to have the following installed in order to develop Python-based container tasks for Release using this
-project:
+### Start the dev environment
 
-* Python 3
-* Docker
-
-### Configure your `hosts` file
-
-Add the following to `/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts` (sudo / administrator permissions
-required):
-
-    127.0.0.1 host.docker.internal
-    127.0.0.1 container-registry
-
-## Start the development environment
-
-This project comes with a Docker environment that sets up a local Release instance with all the required services.
-
-Running the environment with this plugin is a three-step process:
-
-1. Start the Release Docker environment
-2. Build and publish the plugin
-3. Upload the demo templates
-
-When developing the plugin, typically you would just do step 2 after making code changes. The new version of the plugin
-will be picked up without having to restart the server.
-
-### 1. Start the Release environment:
-
-The Release environment is defined in `dev-environment/docker-compose.yaml`.
-
-#### Stopping
-
-Have Docker running and launch the environment with:
-
-```commandline
-docker compose -f dev-environment/docker-compose.yaml up -d --build 
+```bash
+docker compose -f dev-environment/docker-compose.yaml up -d --build
 ```
 
-It takes a while to start up. You can see that the Release server is running when the `digitalai-release-setup`
-container has terminated.
+Log in at http://localhost:5516 with `admin/admin`.
 
-Check if you can log in with `admin/admin` at http://localhost:5516.
+### Build & publish the plugin
 
-#### Stopping
-
-After the demo, you can stop the environment with:
-
-```commandline
-docker compose -f dev-environment/docker-compose.yaml down
-```
-
-### 2. Build & publish the plugin
-
-The `build.sh` script will build the plugin container, publish it to the local registry and install it to the local
-Release instance.
-
-Run the build script
-
-**Unix / macOS**
-
-```commandline
+```bash
 sh build.sh --upload
 ```
 
-**Windows**
-
-```commandline
-build.bat --upload
-```
-
-### 3. Install example templates
-
-#### Set up credentials
-
-The sample templates come with examples to connect to various MCP servers and LLM providers.
-
-Put your API keys in [setup/secrets.xlvals](setup/secrets.xlvals).
-
-Use the example file as a base:
-
-```commandline
-cp setup/secrets.xlvals.example setup/secrets.xlvals
-```
-
-Then edit the file and add your keys.
-
-#### Upload templates
-
-Run the following command to upload the demo templates to the local Release instance:
-
-```commandline
-./xlw apply -f setup/mcp-demo.yaml
-```
-
-The templates will be uploaded to a new **AI Demo** folder.
-
----
-
-## Demo time!
-
-1. Log in to http://localhost:5516 with admin/admin
-2. Go to the **AI Demo** folder
-3. Go the **Templates** section and run the examples
-
-👉Add your favorite MCP Server or LLM provider under Connections and build your own example!
-
----
-
-## Developing
-
 ### Run the tests
 
-The tests are integration tests and need API keys to run. Put your API keys in `.env` file in the root of the project:
-
-```
-GEMINI_API_KEY=<key>
-OPENAI_API_KEY=<key>
-DAI_LLM_API_KEY=<key>
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
-Run the tests with the command
+## Architecture
 
-```commandline
 ```
+src/
+  create_pull_request.py  -- Main 4-phase pipeline task (Setup, Code, Q&A, Deliver)
+  beads_client.py         -- Python wrapper for bd CLI (BeadsClient)
+  git_ops.py              -- Git and GitHub CLI operations
+  opencode_runner.py      -- OpenCode headless invocation
+  agents_md.py            -- AGENTS.md template injection for workspaces
+  beads_test_connection.py -- BeadsServer config validation
+  llm_test_connection.py  -- LLM provider config validation
+
+resources/
+  type-definitions.yaml   -- Release task type definitions
+  container-AGENTS.md     -- AGENTS.md template injected into workspaces
+  container-opencode.json -- OpenCode config (permission: allow)
+
+tests/
+  test_create_pull_request.py  -- 18 tests
+  test_beads_client.py         -- 33 tests
+  test_git_ops.py              -- 15 tests
+  test_opencode_runner.py      -- 15 tests
+  test_agents_md.py            -- 10 tests
+  test_llm_test_connection.py  -- 8 tests
+  test_beads_test_connection.py -- 4 tests
+```
+
+## Container Image
+
+The Dockerfile builds a multi-stage image:
+
+- **Python 3.11-slim** -- Release SDK + task code
+- **Node.js 22** -- OpenCode runtime
+- **gh** -- GitHub CLI for PR creation
+- **bd** -- Beads CLI for issue tracking
+- **dolt** -- Dolt for beads database sync

@@ -1,7 +1,0 @@
-apiVersion: xl-release/v1
-kind: Release
-metadata:
-  home: AI Demo
-spec:
-  name: MCP interaction with Agility
-  template: 1. Agility summarize user
