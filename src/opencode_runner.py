@@ -7,6 +7,7 @@ capture, and the needs-answer signal file detection.
 """
 
 import os
+import selectors
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -95,14 +96,6 @@ def run_opencode(
     print(f"Invoking OpenCode (timeout={timeout}s)...")
     print(f"Command: {' '.join(cmd)}")
     print(f"OPENCODE_CONFIG={env.get('OPENCODE_CONFIG', '(not set)')}")
-    # Print the opencode config contents for debugging
-    config_path = env.get("OPENCODE_CONFIG", "")
-    if config_path and os.path.isfile(config_path):
-        try:
-            with open(config_path, "r") as f:
-                print(f"opencode.json contents:\n{f.read()}")
-        except Exception:
-            pass
     if env.get("ANTHROPIC_API_KEY"):
         print("ANTHROPIC_API_KEY=<set>")
     if env.get("OPENAI_API_KEY"):
@@ -113,13 +106,7 @@ def run_opencode(
     needs_answer_bead_id = _check_needs_answer()
 
     print(f"OpenCode exited with code {exit_code}")
-    if output.strip():
-        # Truncate very long output but always show something
-        display = output.strip()
-        if len(display) > 4000:
-            display = display[:2000] + "\n\n... (truncated) ...\n\n" + display[-2000:]
-        print(f"OpenCode output:\n{display}")
-    else:
+    if not output.strip():
         print("OpenCode produced no output")
     if needs_answer_bead_id:
         print(f"Question detected: bead {needs_answer_bead_id}")
@@ -171,23 +158,70 @@ def _invoke(
     env: Dict[str, str],
     timeout: int,
 ) -> tuple:
-    """Run the subprocess and return (exit_code, output, timed_out)."""
+    """Run the subprocess, streaming output in real-time.
+
+    Uses ``subprocess.Popen`` so that each line of stdout/stderr is
+    printed (via ``print()``) as it arrives.  This makes OpenCode's
+    progress visible in Release task logs during long runs instead of
+    buffering everything until the process exits.
+
+    Returns (exit_code, full_output, timed_out).
+    """
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr into stdout
             text=True,
-            timeout=timeout,
             env=env,
             cwd=cwd,
         )
-        return result.returncode, result.stdout + result.stderr, False
+    except Exception as e:
+        print(f"Failed to start OpenCode: {e}")
+        return 1, str(e), False
 
-    except subprocess.TimeoutExpired as e:
-        stdout = str(e.stdout or "") if e.stdout else ""
-        stderr = str(e.stderr or "") if e.stderr else ""
-        print(f"OpenCode timed out after {timeout}s")
-        return 124, stdout + stderr, True  # 124 matches bash timeout exit code
+    lines: List[str] = []
+    timed_out = False
+
+    try:
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ)  # type: ignore[arg-type]
+
+        import time
+        deadline = time.monotonic() + timeout
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                proc.kill()
+                print(f"OpenCode timed out after {timeout}s")
+                break
+
+            events = sel.select(timeout=min(remaining, 1.0))
+            for key, _ in events:
+                line = key.fileobj.readline()  # type: ignore[union-attr]
+                if line:
+                    lines.append(line)
+                    # Stream to stdout so Release captures it in real-time
+                    print(line, end="", flush=True)
+                else:
+                    # EOF -- process has closed its stdout
+                    sel.unregister(key.fileobj)  # type: ignore[arg-type]
+
+            if not sel.get_map():
+                # stdout closed, wait for process to finish
+                break
+
+        sel.close()
+        proc.wait(timeout=10)
+    except Exception:
+        proc.kill()
+        proc.wait()
+
+    exit_code = proc.returncode if proc.returncode is not None else 1
+    output = "".join(lines)
+    return exit_code, output, timed_out
 
 
 def _check_needs_answer() -> Optional[str]:
