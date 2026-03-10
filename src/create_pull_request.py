@@ -18,23 +18,20 @@ from typing import Any, Dict, Optional
 
 from digitalai.release.integration import BaseTask
 
-from src.agents_md import cleanup_agents_md, inject_agents_md, inject_opencode_config
+from src.agents_md import inject_agents_md
 from src.beads_client import BeadsClient
-from src.git_ops import (
-    clone_repo,
-    configure_git,
-    create_branch,
-    create_pr,
-    get_diff_stat,
-    push_branch,
-    stage_and_commit,
+from src.git_ops import get_diff_stat
+from src.opencode_runner import OpenCodeResult, compose_prompt
+from src.pr_pipeline import (
+    DEFAULT_WORKSPACE,
+    build_llm_env,
+    deliver_pr,
+    invoke_opencode,
+    setup_opencode,
+    setup_workspace,
 )
-from src.opencode_runner import DEFAULT_OPENCODE_CONFIG, OpenCodeResult, compose_prompt, run_opencode
 
 logger = logging.getLogger(__name__)
-
-# Default workspace directory inside the container
-DEFAULT_WORKSPACE = "/workspace"
 
 
 @dataclass
@@ -149,20 +146,14 @@ class CreatePullRequest(BaseTask):
         ctx.bead_data = bead_data
 
         actor = ctx.beads_server.get("actor", "beads-coder")
-        configure_git(actor, f"{actor}@release.digital.ai", ctx.github_token)
-
-        clone_repo(ctx.repo_url, ctx.workspace)
         ctx.branch_name = f"beads/{ctx.bead_id}"
-        create_branch(ctx.workspace, ctx.branch_name, ctx.repo_branch)
+        setup_workspace(ctx.repo_url, ctx.workspace, ctx.branch_name, ctx.repo_branch, actor, ctx.github_token)
 
         ctx.client.update_bead(ctx.bead_id, status="in_progress")
         ctx.client.add_comment(ctx.bead_id, f"Claimed by Release task. Branch: {ctx.branch_name}")
 
         inject_agents_md(ctx.workspace, ctx.bead_id)
-        ctx.opencode_config = inject_opencode_config(ctx.workspace, llm_server=ctx.llm_server)
-
-        ctx.llm_env = self._build_llm_env(ctx.llm_server)
-        ctx.model = ctx.llm_server.get("model") or None
+        ctx.opencode_config, ctx.model, ctx.llm_env = setup_opencode(ctx.workspace, ctx.llm_server)
 
         self._set_phase("setup-complete")
 
@@ -175,12 +166,12 @@ class CreatePullRequest(BaseTask):
         self._set_phase("code")
 
         prompt = compose_prompt(ctx.bead_data)
-        oc_result = run_opencode(
+        oc_result = invoke_opencode(
             prompt=prompt,
             workspace_dir=ctx.workspace,
             model=ctx.model,
             timeout=ctx.opencode_timeout,
-            opencode_config=ctx.opencode_config or DEFAULT_OPENCODE_CONFIG,
+            opencode_config=ctx.opencode_config,
             llm_env=ctx.llm_env,
         )
 
@@ -218,12 +209,12 @@ class CreatePullRequest(BaseTask):
 
             self._set_phase(f"code-resumed-{question_round}")
 
-            oc_result = run_opencode(
+            oc_result = invoke_opencode(
                 prompt=resume_prompt,
                 workspace_dir=ctx.workspace,
                 model=ctx.model,
                 timeout=ctx.opencode_timeout,
-                opencode_config=ctx.opencode_config or DEFAULT_OPENCODE_CONFIG,
+                opencode_config=ctx.opencode_config,
                 llm_env=ctx.llm_env,
             )
 
@@ -263,19 +254,29 @@ class CreatePullRequest(BaseTask):
         """Cleanup, commit, push, create PR, update bead."""
         self._set_phase("deliver")
 
-        cleanup_agents_md(ctx.workspace)
-
         bead_title = ctx.bead_data.get("title", f"implement {ctx.bead_id}")
         commit_msg = f"feat: {bead_title} ({ctx.bead_id})"
-        has_changes = stage_and_commit(ctx.workspace, commit_msg)
+        bead_description = ctx.bead_data.get("description", f"See bead {ctx.bead_id} for details.")
+        diff_stat = ""
 
-        if not has_changes:
+        pr_body = self._build_pr_body(ctx.bead_id, bead_description, "")
+
+        pr_url = deliver_pr(
+            workspace_dir=ctx.workspace,
+            branch_name=ctx.branch_name,
+            base_branch=ctx.repo_branch,
+            github_token=ctx.github_token,
+            pr_title=f"{bead_title} ({ctx.bead_id})",
+            pr_body=pr_body,
+            commit_message=commit_msg,
+        )
+
+        if not pr_url:
             self._finish_no_changes(ctx)
             return
 
-        push_branch(ctx.workspace, ctx.branch_name)
-
-        pr_url = self._create_and_record_pr(ctx, bead_title)
+        ctx.client.update_bead(ctx.bead_id, notes=f"PR: {pr_url}")
+        ctx.client.add_comment(ctx.bead_id, f"Pull request created: {pr_url}")
 
         self._create_review_bead(ctx, bead_title, pr_url)
 
@@ -294,26 +295,6 @@ class CreatePullRequest(BaseTask):
         self.set_output_property("branchName", ctx.branch_name)
         self.set_output_property("beadStatus", "no-changes")
 
-    def _create_and_record_pr(self, ctx: PipelineContext, bead_title: str) -> str:
-        """Create a GitHub PR and record it on the bead. Returns the PR URL."""
-        bead_description = ctx.bead_data.get("description", f"See bead {ctx.bead_id} for details.")
-        diff_stat = get_diff_stat(ctx.workspace)
-        pr_body = self._build_pr_body(ctx.bead_id, bead_description, diff_stat)
-        pr_title = f"{bead_title} ({ctx.bead_id})"
-
-        pr_url = create_pr(
-            workspace_dir=ctx.workspace,
-            title=pr_title,
-            body=pr_body,
-            base_branch=ctx.repo_branch,
-            head_branch=ctx.branch_name,
-            github_token=ctx.github_token,
-        )
-
-        ctx.client.update_bead(ctx.bead_id, notes=f"PR: {pr_url}")
-        ctx.client.add_comment(ctx.bead_id, f"Pull request created: {pr_url}")
-        return pr_url
-
     def _create_review_bead(self, ctx: PipelineContext, bead_title: str, pr_url: str) -> None:
         """Create a review-request child bead for the PR."""
         review_bead = ctx.client.create_bead(
@@ -330,38 +311,22 @@ class CreatePullRequest(BaseTask):
     # Shared helpers
     # -------------------------------------------------------------------
 
-    def _build_llm_env(self, llm_server: Dict) -> Dict[str, str]:
-        """Build environment variables for the LLM provider."""
-        env = {}
-        provider = llm_server.get("provider", "anthropic")
-        api_key = llm_server.get("apiKey", "")
-
-        if provider == "docker-model-runner":
-            # Local model runner -- no API key env var needed
-            pass
-        elif provider == "anthropic":
-            env["ANTHROPIC_API_KEY"] = api_key
-        elif provider == "openai":
-            env["OPENAI_API_KEY"] = api_key
-        else:
-            # Default to anthropic-style env var
-            env["ANTHROPIC_API_KEY"] = api_key
-
-        return env
-
     def _build_pr_body(self, bead_id: str, description: str, diff_stat: str) -> str:
         """Compose the pull request body markdown."""
-        return (
+        body = (
             f"## Summary\n\n"
             f"Automated implementation for bead **{bead_id}**.\n\n"
             f"## Bead Description\n\n"
             f"{description}\n\n"
-            f"## Changes\n\n"
-            f"{diff_stat}\n\n"
+        )
+        if diff_stat:
+            body += f"## Changes\n\n{diff_stat}\n\n"
+        body += (
             f"---\n\n"
             f"*This PR was created automatically by the Release Code Agent plugin. "
             f"Review the changes and provide feedback on the bead or this PR.*"
         )
+        return body
 
     def _poll_for_answer(
         self,

@@ -194,6 +194,71 @@ types:
         kind: string
 
   #
+  # Task: Create Pull Request from Prompt
+  #
+
+  code-agent.CreatePullRequestFromPrompt:
+    extends: code-agent.BaseTask
+    label: "Code Agent: Create PR from Prompt"
+    description: Uses OpenCode AI agent to implement changes described in a text prompt and create a pull request
+
+    input-properties:
+      prompt:
+        label: Prompt
+        description: Text description of the changes to implement
+        kind: string
+        required: true
+
+      repoUrl:
+        label: Repository URL
+        description: GitHub repository URL to clone
+        kind: string
+        required: true
+
+      repoBranch:
+        label: Base Branch
+        description: The branch to create the feature branch from
+        kind: string
+        default: main
+
+      branchPrefix:
+        label: Branch Prefix
+        description: Prefix for the feature branch name (e.g., 'feature' produces feature/<slug>)
+        kind: string
+        default: agent
+
+      githubToken:
+        label: GitHub Token
+        description: GitHub personal access token (needs repo and PR permissions)
+        kind: string
+        password: true
+        required: true
+
+      llmServer:
+        label: LLM Model
+        description: The LLM model configuration for OpenCode
+        kind: ci
+        referenced-type: code-agent.LLMServer
+
+      opencodeTimeout:
+        label: OpenCode Timeout
+        description: Maximum time in seconds for OpenCode to run
+        kind: integer
+        default: 1800
+        required: false
+
+    output-properties:
+      prUrl:
+        label: Pull Request URL
+        description: URL of the created pull request
+        kind: string
+
+      branchName:
+        label: Branch Name
+        description: Name of the feature branch that was created
+        kind: string
+
+  #
   # Scripts
   #
 

@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import MagicMock, call, patch
 
 from src.create_pull_request import CreatePullRequest
+from src.pr_pipeline import build_llm_env
 
 
 def _make_task(overrides=None):
@@ -68,8 +69,9 @@ BEAD_DATA = {
 }
 
 
-# Patch targets (module where names are looked up)
+# Patch targets
 P = "src.create_pull_request"
+PP = "src.pr_pipeline"
 
 
 class TestValidation(unittest.TestCase):
@@ -117,18 +119,18 @@ class TestValidation(unittest.TestCase):
 class TestFullPipeline(unittest.TestCase):
     """Test the happy-path pipeline: setup -> code -> deliver."""
 
-    @patch(f"{P}.create_pr", return_value="https://github.com/org/repo/pull/1")
-    @patch(f"{P}.push_branch")
-    @patch(f"{P}.stage_and_commit", return_value=True)
-    @patch(f"{P}.get_diff_stat", return_value="3 files changed, 50 insertions(+)")
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.create_pr", return_value="https://github.com/org/repo/pull/1")
+    @patch(f"{PP}.push_branch")
+    @patch(f"{PP}.stage_and_commit", return_value=True)
+    @patch(f"{PP}.get_diff_stat", return_value="3 files changed, 50 insertions(+)")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     def test_happy_path(
         self,
@@ -187,9 +189,7 @@ class TestFullPipeline(unittest.TestCase):
 
         # Verify deliver phase
         mock_cleanup.assert_called_once_with("/workspace")
-        mock_stage_commit.assert_called_once_with(
-            "/workspace", "feat: Add user login (bc-42)"
-        )
+        mock_stage_commit.assert_called_once()
         mock_push.assert_called_once_with("/workspace", "beads/bc-42")
         mock_create_pr.assert_called_once()
 
@@ -199,14 +199,15 @@ class TestFullPipeline(unittest.TestCase):
         # Verify final sync
         client.sync_push.assert_called()
 
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.stage_and_commit", return_value=False)
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     def test_no_changes_produced(
         self,
@@ -218,6 +219,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
+        mock_stage_commit,
         mock_cleanup,
     ):
         client = MagicMock()
@@ -230,22 +232,19 @@ class TestFullPipeline(unittest.TestCase):
         oc_result.needs_answer_bead_id = None
         mock_run_oc.return_value = oc_result
 
-        # stage_and_commit returns False (no changes)
-        with patch(f"{P}.stage_and_commit", return_value=False):
-            task = _make_task()
-            task.execute()
+        task = _make_task()
+        task.execute()
 
         self.assertEqual(task._output_properties["prUrl"], "")
         self.assertEqual(task._output_properties["beadStatus"], "no-changes")
 
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     def test_bead_not_found(
         self,
@@ -257,7 +256,6 @@ class TestFullPipeline(unittest.TestCase):
         mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
-        mock_cleanup,
     ):
         client = MagicMock()
         client.show_bead.return_value = None
@@ -272,14 +270,15 @@ class TestFullPipeline(unittest.TestCase):
 class TestOpenCodeFailure(unittest.TestCase):
     """Test OpenCode error handling."""
 
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.stage_and_commit", return_value=False)
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     def test_opencode_failure_raises(
         self,
@@ -291,6 +290,7 @@ class TestOpenCodeFailure(unittest.TestCase):
         mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
+        mock_stage_commit,
         mock_cleanup,
     ):
         client = MagicMock()
@@ -309,18 +309,18 @@ class TestOpenCodeFailure(unittest.TestCase):
         self.assertIn("exit code 1", str(ctx.exception))
         client.add_comment.assert_any_call("bc-42", "OpenCode failed with exit code 1")
 
-    @patch(f"{P}.create_pr", return_value="https://github.com/org/repo/pull/2")
-    @patch(f"{P}.push_branch")
-    @patch(f"{P}.stage_and_commit", return_value=True)
-    @patch(f"{P}.get_diff_stat", return_value="1 file changed")
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.create_pr", return_value="https://github.com/org/repo/pull/2")
+    @patch(f"{PP}.push_branch")
+    @patch(f"{PP}.stage_and_commit", return_value=True)
+    @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     def test_opencode_timeout_continues(
         self,
@@ -361,18 +361,18 @@ class TestOpenCodeFailure(unittest.TestCase):
 class TestQuestionLoop(unittest.TestCase):
     """Test the question-answer loop (Phase 3)."""
 
-    @patch(f"{P}.create_pr", return_value="https://github.com/org/repo/pull/3")
-    @patch(f"{P}.push_branch")
-    @patch(f"{P}.stage_and_commit", return_value=True)
-    @patch(f"{P}.get_diff_stat", return_value="2 files changed")
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.create_pr", return_value="https://github.com/org/repo/pull/3")
+    @patch(f"{PP}.push_branch")
+    @patch(f"{PP}.stage_and_commit", return_value=True)
+    @patch(f"{PP}.get_diff_stat", return_value="2 files changed")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     @patch(f"{P}.time")
     def test_one_question_answered(
@@ -429,18 +429,18 @@ class TestQuestionLoop(unittest.TestCase):
         # Verify PR created
         self.assertEqual(task._output_properties["prUrl"], "https://github.com/org/repo/pull/3")
 
-    @patch(f"{P}.create_pr", return_value="https://github.com/org/repo/pull/4")
-    @patch(f"{P}.push_branch")
-    @patch(f"{P}.stage_and_commit", return_value=True)
-    @patch(f"{P}.get_diff_stat", return_value="1 file changed")
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.create_pr", return_value="https://github.com/org/repo/pull/4")
+    @patch(f"{PP}.push_branch")
+    @patch(f"{PP}.stage_and_commit", return_value=True)
+    @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     @patch(f"{P}.time")
     def test_question_timeout_proceeds(
@@ -498,14 +498,15 @@ class TestQuestionLoop(unittest.TestCase):
             "Question timed out after 10s. Agent proceeding with best judgment.",
         )
 
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.stage_and_commit", return_value=False)
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     @patch(f"{P}.time")
     def test_max_question_rounds_exceeded(
@@ -519,6 +520,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
+        mock_stage_commit,
         mock_cleanup,
     ):
         mock_time.sleep = MagicMock()
@@ -537,11 +539,8 @@ class TestQuestionLoop(unittest.TestCase):
         # 4 runs: initial + 3 resumes (max rounds = 3), all with questions
         mock_run_oc.side_effect = [oc_result_with_question] * 4
 
-        # After breaking out of question loop, it will check exit_code for fatal failure.
-        # exit_code=0 + needs_answer_bead_id set -> not fatal, so it proceeds to deliver.
-        with patch(f"{P}.stage_and_commit", return_value=False):
-            task = _make_task()
-            task.execute()
+        task = _make_task()
+        task.execute()
 
         # 4 OpenCode calls: 1 initial + 3 resumed
         self.assertEqual(mock_run_oc.call_count, 4)
@@ -554,26 +553,22 @@ class TestQuestionLoop(unittest.TestCase):
 
 
 class TestLLMEnv(unittest.TestCase):
-    """Test LLM environment variable construction."""
+    """Test LLM environment variable construction (now in pr_pipeline)."""
 
     def test_anthropic_env(self):
-        task = _make_task()
-        env = task._build_llm_env({"provider": "anthropic", "apiKey": "sk-ant-key"})
+        env = build_llm_env({"provider": "anthropic", "apiKey": "sk-ant-key"})
         self.assertEqual(env, {"ANTHROPIC_API_KEY": "sk-ant-key"})
 
     def test_openai_env(self):
-        task = _make_task()
-        env = task._build_llm_env({"provider": "openai", "apiKey": "sk-openai-key"})
+        env = build_llm_env({"provider": "openai", "apiKey": "sk-openai-key"})
         self.assertEqual(env, {"OPENAI_API_KEY": "sk-openai-key"})
 
     def test_unknown_provider_defaults_anthropic(self):
-        task = _make_task()
-        env = task._build_llm_env({"provider": "custom", "apiKey": "key123"})
+        env = build_llm_env({"provider": "custom", "apiKey": "key123"})
         self.assertEqual(env, {"ANTHROPIC_API_KEY": "key123"})
 
     def test_docker_model_runner_env(self):
-        task = _make_task()
-        env = task._build_llm_env({"provider": "docker-model-runner"})
+        env = build_llm_env({"provider": "docker-model-runner"})
         self.assertEqual(env, {})
 
 
@@ -592,18 +587,18 @@ class TestPRBody(unittest.TestCase):
 class TestQuestionBeadClosed(unittest.TestCase):
     """Test that a closed question bead with notes is treated as an answer."""
 
-    @patch(f"{P}.create_pr", return_value="https://github.com/org/repo/pull/5")
-    @patch(f"{P}.push_branch")
-    @patch(f"{P}.stage_and_commit", return_value=True)
-    @patch(f"{P}.get_diff_stat", return_value="1 file changed")
-    @patch(f"{P}.cleanup_agents_md")
-    @patch(f"{P}.run_opencode")
+    @patch(f"{PP}.create_pr", return_value="https://github.com/org/repo/pull/5")
+    @patch(f"{PP}.push_branch")
+    @patch(f"{PP}.stage_and_commit", return_value=True)
+    @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
-    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
+    @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
-    @patch(f"{P}.create_branch")
-    @patch(f"{P}.clone_repo")
-    @patch(f"{P}.configure_git")
+    @patch(f"{PP}.create_branch")
+    @patch(f"{PP}.clone_repo")
+    @patch(f"{PP}.configure_git")
     @patch(f"{P}.BeadsClient")
     @patch(f"{P}.time")
     def test_closed_question_bead_with_notes(
