@@ -11,7 +11,6 @@ Ports the orchestration logic from beads-coder's entrypoint.sh, run-agent.sh,
 and deliver.sh into a single Release container task.
 """
 
-import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -30,8 +29,6 @@ from src.pr_pipeline import (
     setup_opencode,
     setup_workspace,
 )
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -200,7 +197,7 @@ class CreatePullRequest(BaseTask):
 
             self._set_phase(f"question-loop-{question_round}")
             question_bead_id = oc_result.needs_answer_bead_id
-            logger.info(f"Question detected: {question_bead_id} (round {question_round})")
+            print(f"Question detected: {question_bead_id} (round {question_round})")
 
             ctx.client.sync_push()
 
@@ -305,7 +302,7 @@ class CreatePullRequest(BaseTask):
             parent=ctx.bead_id,
         )
         if review_bead:
-            logger.info(f"Review bead created: {review_bead.get('id', 'unknown')}")
+            print(f"Review bead created: {review_bead.get('id', 'unknown')}")
 
     # -------------------------------------------------------------------
     # Shared helpers
@@ -341,7 +338,7 @@ class CreatePullRequest(BaseTask):
         Returns the answer text, or None if timed out.
         Mirrors run-agent.sh poll_for_answer() function.
         """
-        logger.info(f"Polling for answer to {question_bead_id} (timeout: {timeout}s)...")
+        print(f"Polling for answer to {question_bead_id} (timeout: {timeout}s)...")
         elapsed = 0
 
         while elapsed < timeout:
@@ -351,16 +348,16 @@ class CreatePullRequest(BaseTask):
 
             answer = self._extract_answer_from_comments(client, question_bead_id)
             if answer:
-                logger.info(f"Answer received for {question_bead_id} after {elapsed}s")
+                print(f"Answer received for {question_bead_id} after {elapsed}s")
                 return answer
 
             answer = self._extract_answer_from_closed_bead(client, question_bead_id)
             if answer:
                 return answer
 
-            logger.info(f"No answer yet for {question_bead_id} ({elapsed}s / {timeout}s)")
+            print(f"No answer yet for {question_bead_id} ({elapsed}s / {timeout}s)")
 
-        logger.warning(f"Question timeout after {timeout}s for {question_bead_id}")
+        print(f"Question timeout after {timeout}s for {question_bead_id}")
         return None
 
     def _extract_answer_from_comments(self, client: BeadsClient, question_bead_id: str) -> Optional[str]:
@@ -377,13 +374,13 @@ class CreatePullRequest(BaseTask):
         if q_bead and q_bead.get("status") == "closed":
             notes = q_bead.get("notes", "")
             if notes:
-                logger.info("Question bead was closed with notes -- treating as answer")
+                print("Question bead was closed with notes -- treating as answer")
                 return notes
         return None
 
     def _set_phase(self, phase: str) -> None:
         """Update the task status line in Release UI."""
-        logger.info(f"Phase: {phase}")
+        print(f"Phase: {phase}")
         try:
             self.set_status_line(f"Phase: {phase}")
         except Exception:
@@ -391,7 +388,7 @@ class CreatePullRequest(BaseTask):
 
     def _comment(self, message: str) -> None:
         """Add a comment to the Release task activity log."""
-        logger.info(message)
+        print(message)
         try:
             self.add_comment(message)
         except Exception:

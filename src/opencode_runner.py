@@ -6,13 +6,10 @@ invocation to Python. Handles environment setup, timeout, output
 capture, and the needs-answer signal file detection.
 """
 
-import logging
 import os
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-
-logger = logging.getLogger(__name__)
 
 # Signal file path (written by OpenCode via AGENTS.md instructions)
 NEEDS_ANSWER_FILE = "/tmp/needs-answer"
@@ -95,16 +92,16 @@ def run_opencode(
     env = _build_env(opencode_config, llm_env)
     cmd = _build_cmd(prompt, workspace_dir, model)
 
-    logger.info(f"Invoking OpenCode (timeout={timeout}s)...")
-    logger.debug(f"Command: {' '.join(cmd[:6])}...")  # Don't log full prompt
+    print(f"Invoking OpenCode (timeout={timeout}s)...")
+    print(f"Command: {' '.join(cmd[:6])}...")  # Don't log full prompt
 
     exit_code, output, timed_out = _invoke(cmd, workspace_dir, env, timeout)
 
     needs_answer_bead_id = _check_needs_answer()
 
-    logger.info(f"OpenCode exited with code {exit_code}")
+    print(f"OpenCode exited with code {exit_code}")
     if needs_answer_bead_id:
-        logger.info(f"Question detected: bead {needs_answer_bead_id}")
+        print(f"Question detected: bead {needs_answer_bead_id}")
 
     return OpenCodeResult(
         exit_code=exit_code,
@@ -168,7 +165,7 @@ def _invoke(
     except subprocess.TimeoutExpired as e:
         stdout = str(e.stdout or "") if e.stdout else ""
         stderr = str(e.stderr or "") if e.stderr else ""
-        logger.warning(f"OpenCode timed out after {timeout}s")
+        print(f"OpenCode timed out after {timeout}s")
         return 124, stdout + stderr, True  # 124 matches bash timeout exit code
 
 

@@ -6,12 +6,9 @@ to Python subprocess calls. Handles auth, clone, branch, commit, push,
 and PR creation.
 """
 
-import logging
 import os
 import subprocess
 from typing import List, Optional
-
-logger = logging.getLogger(__name__)
 
 
 def _run(
@@ -22,7 +19,6 @@ def _run(
     env: Optional[dict] = None,
 ) -> subprocess.CompletedProcess:
     """Run a shell command with logging and error handling."""
-    logger.debug(f"Running: {' '.join(cmd)} (cwd={cwd})")
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -33,7 +29,7 @@ def _run(
         check=False,
     )
     if check and result.returncode != 0:
-        logger.error(f"Command failed (exit {result.returncode}): {result.stderr.strip()}")
+        print(f"Command failed (exit {result.returncode}): {result.stderr.strip()}")
         raise subprocess.CalledProcessError(
             result.returncode, cmd, result.stdout, result.stderr
         )
@@ -51,7 +47,7 @@ def configure_git(actor: str, email: str, github_token: str) -> None:
 
     Mirrors setup.sh lines 41-60.
     """
-    logger.info(f"Configuring git identity: {actor} <{email}>")
+    print(f"Configuring git identity: {actor} <{email}>")
     _set_git_identity(actor, email)
     _set_git_token_rewrite(github_token)
     _verify_gh_auth(github_token)
@@ -78,9 +74,9 @@ def _verify_gh_auth(github_token: str) -> None:
     env["GITHUB_TOKEN"] = github_token
     result = _run(["gh", "auth", "status"], check=False, env=env)
     if result.returncode == 0:
-        logger.info("GitHub CLI authenticated via GITHUB_TOKEN env var.")
+        print("GitHub CLI authenticated via GITHUB_TOKEN env var.")
     else:
-        logger.warning(f"GitHub CLI auth check returned non-zero: {result.stderr.strip()}")
+        print(f"GitHub CLI auth check returned non-zero: {result.stderr.strip()}")
 
 
 # ---------------------------------------------------------------------------
@@ -95,12 +91,12 @@ def clone_repo(repo_url: str, workspace_dir: str, timeout: int = 600) -> None:
     Mirrors setup.sh lines 143-154.
     """
     if os.path.isdir(os.path.join(workspace_dir, ".git")):
-        logger.warning("Workspace already contains a git repo -- using existing clone")
+        print("Workspace already contains a git repo -- using existing clone")
         return
 
-    logger.info(f"Cloning {repo_url} into {workspace_dir}...")
+    print(f"Cloning {repo_url} into {workspace_dir}...")
     _run(["git", "clone", repo_url, workspace_dir], timeout=timeout)
-    logger.info("Clone complete.")
+    print("Clone complete.")
 
 
 def create_branch(workspace_dir: str, branch_name: str, base_branch: str = "main") -> None:
@@ -109,7 +105,7 @@ def create_branch(workspace_dir: str, branch_name: str, base_branch: str = "main
 
     Mirrors setup.sh lines 165-173.
     """
-    logger.info(f"Creating branch {branch_name} from origin/{base_branch}")
+    print(f"Creating branch {branch_name} from origin/{base_branch}")
     _run(
         ["git", "checkout", "-b", branch_name, f"origin/{base_branch}"],
         cwd=workspace_dir,
@@ -141,16 +137,16 @@ def stage_and_commit(
     _revert_excluded_files(workspace_dir, exclude_patterns)
 
     if not _has_uncommitted_changes(workspace_dir):
-        logger.warning("No changes detected in workspace")
+        print("No changes detected in workspace")
         return False
 
     _stage_all_except(workspace_dir, exclude_patterns)
 
     if not _has_staged_changes(workspace_dir):
-        logger.warning("No changes remain after excluding orchestrator artifacts")
+        print("No changes remain after excluding orchestrator artifacts")
         return False
 
-    logger.info(f"Committing: {commit_message}")
+    print(f"Committing: {commit_message}")
     _run(["git", "commit", "-m", commit_message], cwd=workspace_dir)
     return True
 
@@ -176,9 +172,9 @@ def _has_uncommitted_changes(workspace_dir: str) -> bool:
     untracked = untracked_result.stdout.strip()
 
     if diff_stat:
-        logger.info(f"Changes detected:\n{diff_stat}")
+        print(f"Changes detected:\n{diff_stat}")
     if untracked:
-        logger.info(f"Untracked files:\n{untracked}")
+        print(f"Untracked files:\n{untracked}")
 
     return bool(diff_stat or untracked)
 
@@ -202,13 +198,13 @@ def push_branch(workspace_dir: str, branch_name: str, timeout: int = 300) -> Non
 
     Mirrors deliver.sh lines 84-89.
     """
-    logger.info(f"Pushing branch {branch_name} to origin...")
+    print(f"Pushing branch {branch_name} to origin...")
     _run(
         ["git", "push", "-u", "origin", branch_name],
         cwd=workspace_dir,
         timeout=timeout,
     )
-    logger.info("Push complete.")
+    print("Push complete.")
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +226,7 @@ def create_pr(
     Returns the PR URL.
     Mirrors deliver.sh lines 93-128.
     """
-    logger.info("Creating pull request...")
+    print("Creating pull request...")
     env = os.environ.copy()
     env["GITHUB_TOKEN"] = github_token
 
@@ -247,7 +243,7 @@ def create_pr(
     )
 
     pr_url = result.stdout.strip()
-    logger.info(f"PR created: {pr_url}")
+    print(f"PR created: {pr_url}")
     return pr_url
 
 

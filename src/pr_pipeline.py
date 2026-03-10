@@ -11,7 +11,6 @@ Extracts the common orchestration steps used by both CreatePullRequest
   - Release UI helpers (_set_phase, _comment)
 """
 
-import logging
 from typing import Any, Dict, Optional
 
 from src.agents_md import cleanup_agents_md, cleanup_opencode_config, inject_opencode_config
@@ -25,8 +24,6 @@ from src.git_ops import (
     stage_and_commit,
 )
 from src.opencode_runner import DEFAULT_OPENCODE_CONFIG, OpenCodeResult, run_opencode
-
-logger = logging.getLogger(__name__)
 
 # Default workspace directory inside the container
 DEFAULT_WORKSPACE = "/workspace"

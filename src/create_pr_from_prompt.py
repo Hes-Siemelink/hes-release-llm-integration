@@ -8,7 +8,6 @@ instead of a bead ID. No beads server, no question loop -- just:
   Phase 3 (Deliver): Cleanup, commit, push, create PR
 """
 
-import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -24,8 +23,6 @@ from src.pr_pipeline import (
     setup_opencode,
     setup_workspace,
 )
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -189,7 +186,7 @@ class CreatePullRequestFromPrompt(BaseTask):
 
     def _set_phase(self, phase: str) -> None:
         """Update the task status line in Release UI."""
-        logger.info(f"Phase: {phase}")
+        print(f"Phase: {phase}")
         try:
             self.set_status_line(f"Phase: {phase}")
         except Exception:
@@ -197,7 +194,7 @@ class CreatePullRequestFromPrompt(BaseTask):
 
     def _comment(self, message: str) -> None:
         """Add a comment to the Release task activity log."""
-        logger.info(message)
+        print(message)
         try:
             self.add_comment(message)
         except Exception:

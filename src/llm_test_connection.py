@@ -6,13 +6,10 @@ to the configured LLM provider.
 """
 
 import json
-import logging
 import subprocess
 from typing import Any, Dict, List
 
 from digitalai.release.integration import BaseTask
-
-logger = logging.getLogger(__name__)
 
 # Provider-specific env var names for API keys
 PROVIDER_ENV_VARS = {
@@ -101,12 +98,12 @@ class LLMTestConnection(BaseTask):
         if provider != "docker-model-runner" and not api_key:
             raise ValueError("API key is required")
 
-        logger.info(f"Testing connection to {provider} provider...")
+        print(f"Testing connection to {provider} provider...")
 
         try:
             if provider == "docker-model-runner":
                 _test_docker_model_runner(url=url)
-                logger.info("Docker Model Runner connection validated")
+                print("Docker Model Runner connection validated")
             elif provider in _API_URLS:
                 test_model = model or _DEFAULT_MODELS[provider]
                 body = json.dumps({
@@ -120,7 +117,7 @@ class LLMTestConnection(BaseTask):
                     body,
                     provider,
                 )
-                logger.info(f"{provider.title()} API key validated (model: {test_model})")
+                print(f"{provider.title()} API key validated (model: {test_model})")
             else:
                 raise ValueError(f"Unknown provider: {provider}")
 

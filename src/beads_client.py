@@ -7,14 +7,11 @@ and metadata configuration. All bd CLI calls go through subprocess.
 """
 
 import json
-import logging
 import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +88,7 @@ class BeadsClient:
         if capture_json and "--json" not in args:
             cmd.append("--json")
 
-        logger.debug(f"Running: {' '.join(cmd)}")
+        print(f"Running: {' '.join(cmd)}")
 
         result = subprocess.run(
             cmd,
@@ -103,7 +100,7 @@ class BeadsClient:
         )
 
         if check and result.returncode != 0:
-            logger.error(f"bd command failed (exit {result.returncode}): {result.stderr.strip()}")
+            print(f"bd command failed (exit {result.returncode}): {result.stderr.strip()}")
             raise subprocess.CalledProcessError(
                 result.returncode, cmd, result.stdout, result.stderr
             )
@@ -117,7 +114,7 @@ class BeadsClient:
         try:
             return json.loads(output.strip())
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse bd JSON output: {e}")
+            print(f"Failed to parse bd JSON output: {e}")
             return None
 
     # ---------------------------------------------------------------------------
@@ -154,7 +151,7 @@ class BeadsClient:
         with open(port_path, "w") as f:
             f.write(str(self.config.port))
 
-        logger.info(f"Beads metadata written to {metadata_path}")
+        print(f"Beads metadata written to {metadata_path}")
 
     # ---------------------------------------------------------------------------
     # Bead CRUD
@@ -169,14 +166,14 @@ class BeadsClient:
         try:
             result = self._run_bd(["show", bead_id, "--json"], check=False)
             if result.returncode != 0:
-                logger.warning(f"Failed to show bead {bead_id}: {result.stderr.strip()}")
+                print(f"Failed to show bead {bead_id}: {result.stderr.strip()}")
                 return None
             data = self._parse_json_output(result.stdout)
             if isinstance(data, list) and len(data) > 0:
                 return data[0]
             return data
         except subprocess.TimeoutExpired:
-            logger.error(f"Timeout reading bead {bead_id}")
+            print(f"Timeout reading bead {bead_id}")
             return None
 
     def update_bead(self, bead_id: str, **kwargs) -> bool:
@@ -194,7 +191,7 @@ class BeadsClient:
             self._run_bd(args, check=True)
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            logger.warning(f"Failed to update bead {bead_id}: {e}")
+            print(f"Failed to update bead {bead_id}: {e}")
             return False
 
     def create_bead(
@@ -227,7 +224,7 @@ class BeadsClient:
                 return data[0]
             return data
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            logger.warning(f"Failed to create bead: {e}")
+            print(f"Failed to create bead: {e}")
             return None
 
     def close_bead(self, bead_id: str, reason: str = "") -> bool:
@@ -241,7 +238,7 @@ class BeadsClient:
             self._run_bd(args, check=True)
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            logger.warning(f"Failed to close bead {bead_id}: {e}")
+            print(f"Failed to close bead {bead_id}: {e}")
             return False
 
     # ---------------------------------------------------------------------------
@@ -258,7 +255,7 @@ class BeadsClient:
             self._run_bd(["comments", "add", bead_id, message], check=False)
             return True
         except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout adding comment to {bead_id}")
+            print(f"Timeout adding comment to {bead_id}")
             return False
 
     def list_comments(self, bead_id: str) -> List[Dict[str, Any]]:
@@ -276,7 +273,7 @@ class BeadsClient:
             data = self._parse_json_output(result.stdout)
             return data if isinstance(data, list) else []
         except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout listing comments for {bead_id}")
+            print(f"Timeout listing comments for {bead_id}")
             return []
 
     # ---------------------------------------------------------------------------
@@ -289,30 +286,30 @@ class BeadsClient:
 
         Mirrors lib.sh beads_sync_push() function.
         """
-        logger.info(f"Pushing beads data (mode={self.config.sync_mode})...")
+        print(f"Pushing beads data (mode={self.config.sync_mode})...")
 
         if self.config.sync_mode == "direct":
             # Direct SQL: commit working set so changes are visible
             try:
                 self._run_bd(["dolt", "commit"], check=False)
-                logger.info("Direct SQL mode -- committed working set.")
+                print("Direct SQL mode -- committed working set.")
                 return True
             except subprocess.TimeoutExpired:
-                logger.warning("Timeout during dolt commit")
+                print("Timeout during dolt commit")
                 return False
 
         elif self.config.sync_mode == "dolt":
             try:
                 self._run_bd(["dolt", "commit"], check=False)
                 self._run_bd(["dolt", "push"], check=True)
-                logger.info("Dolt push complete.")
+                print("Dolt push complete.")
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"Dolt push failed: {e}")
+                print(f"Dolt push failed: {e}")
                 return False
 
         else:
-            logger.error(f"Unknown sync mode: {self.config.sync_mode}")
+            print(f"Unknown sync mode: {self.config.sync_mode}")
             return False
 
     def sync_pull(self) -> bool:
@@ -321,24 +318,24 @@ class BeadsClient:
 
         Mirrors lib.sh beads_sync_pull() function.
         """
-        logger.info(f"Pulling beads data (mode={self.config.sync_mode})...")
+        print(f"Pulling beads data (mode={self.config.sync_mode})...")
 
         if self.config.sync_mode == "direct":
             # Direct SQL: no pull needed, reads go directly to shared DB
-            logger.info("Direct SQL mode -- no pull needed.")
+            print("Direct SQL mode -- no pull needed.")
             return True
 
         elif self.config.sync_mode == "dolt":
             try:
                 self._run_bd(["dolt", "pull"], check=True)
-                logger.info("Dolt pull complete.")
+                print("Dolt pull complete.")
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"Dolt pull failed: {e}")
+                print(f"Dolt pull failed: {e}")
                 return False
 
         else:
-            logger.error(f"Unknown sync mode: {self.config.sync_mode}")
+            print(f"Unknown sync mode: {self.config.sync_mode}")
             return False
 
     # ---------------------------------------------------------------------------

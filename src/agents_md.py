@@ -8,12 +8,9 @@ Also handles cleanup before commit.
 """
 
 import json
-import logging
 import os
 import shutil
 from typing import Any, Dict, Optional
-
-logger = logging.getLogger(__name__)
 
 # Separator used when appending to an existing AGENTS.md
 SEPARATOR = "\n\n---\n\n# Orchestrator Instructions (injected -- do not commit)\n\n"
@@ -87,16 +84,16 @@ def _write_agents_md(agents_md_path: str, rendered: str) -> None:
 
     if os.path.isfile(agents_md_path):
         shutil.copy2(agents_md_path, backup_path)
-        logger.info(f"Backed up existing AGENTS.md to {backup_path}")
+        print(f"Backed up existing AGENTS.md to {backup_path}")
 
         with open(agents_md_path, "a") as f:
             f.write(SEPARATOR)
             f.write(rendered)
-        logger.info(f"Appended orchestrator instructions to {agents_md_path}")
+        print(f"Appended orchestrator instructions to {agents_md_path}")
     else:
         with open(agents_md_path, "w") as f:
             f.write(rendered)
-        logger.info(f"Created {agents_md_path} with orchestrator instructions")
+        print(f"Created {agents_md_path} with orchestrator instructions")
 
 
 def cleanup_agents_md(workspace_dir: str) -> None:
@@ -112,12 +109,12 @@ def cleanup_agents_md(workspace_dir: str) -> None:
 
     if os.path.isfile(backup_path):
         shutil.move(backup_path, agents_md_path)
-        logger.info("Restored original AGENTS.md from backup")
+        print("Restored original AGENTS.md from backup")
     elif os.path.isfile(agents_md_path):
         os.remove(agents_md_path)
-        logger.info("Removed injected AGENTS.md (no original existed)")
+        print("Removed injected AGENTS.md (no original existed)")
     else:
-        logger.debug("No AGENTS.md to clean up")
+        print("No AGENTS.md to clean up")
 
 
 def cleanup_opencode_config(workspace_dir: str) -> None:
@@ -133,12 +130,12 @@ def cleanup_opencode_config(workspace_dir: str) -> None:
 
     if os.path.isfile(backup_path):
         shutil.move(backup_path, config_path)
-        logger.info("Restored original opencode.json from backup")
+        print("Restored original opencode.json from backup")
     elif os.path.isfile(config_path):
         os.remove(config_path)
-        logger.info("Removed injected opencode.json (no original existed)")
+        print("Removed injected opencode.json (no original existed)")
     else:
-        logger.debug("No opencode.json to clean up")
+        print("No opencode.json to clean up")
 
 
 # ---------------------------------------------------------------------------
@@ -170,14 +167,14 @@ def inject_opencode_config(
     # Back up existing opencode.json so we can restore it later
     if os.path.isfile(dest_path):
         shutil.copy2(dest_path, backup_path)
-        logger.info(f"Backed up existing opencode.json to {backup_path}")
+        print(f"Backed up existing opencode.json to {backup_path}")
 
     config = _load_opencode_template(src_path)
     if llm_server:
         _apply_llm_server_url(config, llm_server)
     _write_json(dest_path, config)
 
-    logger.info(f"Wrote opencode.json to {dest_path}")
+    print(f"Wrote opencode.json to {dest_path}")
     return dest_path
 
 
@@ -198,7 +195,7 @@ def _apply_llm_server_url(config: Dict[str, Any], llm_server: Dict[str, Any]) ->
 
     if provider == "docker-model-runner" and "docker-model-runner" in providers:
         providers["docker-model-runner"].setdefault("options", {})["baseURL"] = url
-        logger.info(f"Set docker-model-runner baseURL to {url}")
+        print(f"Set docker-model-runner baseURL to {url}")
 
 
 def _write_json(path: str, data: Dict[str, Any]) -> None:

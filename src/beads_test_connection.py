@@ -5,13 +5,9 @@ Validates that the bd CLI can reach the beads server and access beads
 by initializing metadata and running a basic bd command.
 """
 
-import logging
-
 from digitalai.release.integration import BaseTask
 
 from src.beads_client import BeadsClient
-
-logger = logging.getLogger(__name__)
 
 
 class BeadsTestConnection(BaseTask):
@@ -31,7 +27,7 @@ class BeadsTestConnection(BaseTask):
         host = server.get('host', '(unset)')
         port = server.get('port', '(unset)')
         project = server.get('projectId', '(unset)')
-        logger.info(
+        print(
             f"Testing beads server connection to {host}:{port} "
             f"(project: {project})..."
         )
@@ -49,7 +45,7 @@ class BeadsTestConnection(BaseTask):
                         f"(project: {project})"
                     ),
                 })
-                logger.info("Beads server connection successful")
+                print("Beads server connection successful")
             else:
                 raise RuntimeError(
                     f"bd CLI could not connect to the beads server at "
