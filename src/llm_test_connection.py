@@ -3,6 +3,10 @@ llm_test_connection.py -- Test connection script for LLM server configuration.
 
 Validates that the API key is valid by making a minimal API call
 to the configured LLM provider.
+
+Raises:
+    ValueError: If API key is not provided.
+    RuntimeError: If LLM connection test fails.
 """
 
 import json
@@ -22,15 +26,30 @@ PROVIDER_ENV_VARS = {
 
 
 class LLMTestConnection(BaseTask):
-    """
-    Test connection script for code-agent.LLMServer configuration.
+    """Test connection script for code-agent.LLMServer configuration.
 
     Validates the LLM configuration by making a minimal API call
     using curl. This avoids needing the LLM SDK libraries installed
     just for connection testing.
+
+    Raises:
+        ValueError: If API key is not provided.
+        RuntimeError: If LLM connection test fails.
     """
 
     def execute(self) -> None:
+        """Execute the LLM connection test.
+
+        This method validates the LLM configuration by making a minimal API call
+        using curl. It handles both Anthropic and OpenAI providers.
+
+        Args:
+            self: The LLMTestConnection instance.
+
+        Raises:
+            ValueError: If API key is not provided.
+            RuntimeError: If LLM connection test fails.
+        """
         server = self.input_properties.get("server", {})
         provider = server.get("provider", "anthropic")
         api_key = server.get("apiKey", "")
@@ -59,7 +78,15 @@ class LLMTestConnection(BaseTask):
             raise RuntimeError(f"LLM connection test failed: {e}") from e
 
     def _test_anthropic(self, api_key: str, model: str) -> None:
-        """Test Anthropic API by sending a minimal messages request."""
+        """Test Anthropic API by sending a minimal messages request.
+
+        Args:
+            api_key: The Anthropic API key.
+            model: The model to test with.
+
+        Raises:
+            RuntimeError: If the Anthropic API returns an error.
+        """
         test_model = model or "claude-sonnet-4-20250514"
         result = subprocess.run(
             [
@@ -85,7 +112,15 @@ class LLMTestConnection(BaseTask):
         logger.info(f"Anthropic API key validated (model: {test_model})")
 
     def _test_openai(self, api_key: str, model: str) -> None:
-        """Test OpenAI API by sending a minimal chat completion request."""
+        """Test OpenAI API by sending a minimal chat completion request.
+
+        Args:
+            api_key: The OpenAI API key.
+            model: The model to test with.
+
+        Raises:
+            RuntimeError: If the OpenAI API returns an error.
+        """
         test_model = model or "gpt-4o-mini"
         result = subprocess.run(
             [

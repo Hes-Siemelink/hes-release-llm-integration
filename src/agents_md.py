@@ -5,6 +5,10 @@ Ports beads-coder's setup.sh AGENTS.md injection logic to Python.
 Reads the container-AGENTS.md template from the resources directory,
 substitutes placeholders, and injects it into the cloned workspace.
 Also handles cleanup before commit.
+
+Raises:
+    FileNotFoundError: If container-AGENTS.md template is not found in any
+        of the expected directories.
 """
 
 import logging
@@ -27,7 +31,18 @@ DEFAULT_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "resources"
 
 
 def _find_template(template_dir: Optional[str] = None) -> str:
-    """Locate the container-AGENTS.md template file."""
+    """Locate the container-AGENTS.md template file.
+
+    Args:
+        template_dir: Optional override for template location.
+
+    Returns:
+        Path to the container-AGENTS.md template file.
+
+    Raises:
+        FileNotFoundError: If container-AGENTS.md template is not found in any
+            of the expected directories.
+    """
     search_dirs = []
     if template_dir:
         search_dirs.append(template_dir)
@@ -50,8 +65,7 @@ def inject_agents_md(
     bead_id: str,
     template_dir: Optional[str] = None,
 ) -> str:
-    """
-    Inject container-specific AGENTS.md instructions into the workspace.
+    """Inject container-specific AGENTS.md instructions into the workspace.
 
     If the workspace already has an AGENTS.md, backs it up and appends
     the orchestrator instructions. If not, creates a new one.
@@ -63,6 +77,10 @@ def inject_agents_md(
 
     Returns:
         Path to the written AGENTS.md file.
+
+    Raises:
+        FileNotFoundError: If the template file cannot be found.
+        IOError: If there are issues reading or writing files.
     """
     template_path = _find_template(template_dir)
 
@@ -95,12 +113,14 @@ def inject_agents_md(
 
 
 def cleanup_agents_md(workspace_dir: str) -> None:
-    """
-    Restore the original AGENTS.md before committing.
+    """Restore the original AGENTS.md before committing.
 
     If a backup exists, restores it. If no backup (meaning we created the
     file from scratch), removes it entirely so the commit doesn't include
     orchestrator artifacts.
+
+    Args:
+        workspace_dir: Path to the cloned repo workspace.
     """
     agents_md_path = os.path.join(workspace_dir, "AGENTS.md")
     backup_path = agents_md_path + BACKUP_SUFFIX
@@ -121,13 +141,20 @@ def inject_opencode_config(
     workspace_dir: str,
     template_dir: Optional[str] = None,
 ) -> str:
-    """
-    Copy container-opencode.json into the workspace as opencode.json.
+    """Copy container-opencode.json into the workspace as opencode.json.
 
     This ensures OpenCode runs with permission: allow in the container.
 
+    Args:
+        workspace_dir: Path to the cloned repo workspace.
+        template_dir: Optional override for template location.
+
     Returns:
         Path to the written opencode.json file.
+
+    Raises:
+        FileNotFoundError: If the template file cannot be found.
+        IOError: If there are issues reading or writing files.
     """
     search_dirs = []
     if template_dir:
