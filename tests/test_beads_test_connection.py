@@ -43,8 +43,8 @@ class TestBeadsTestConnection(unittest.TestCase):
         })
         task.execute()
 
-        self.assertEqual(task._output_properties["commandResponse"]["status"], "OK")
-        self.assertEqual(task._output_properties["commandResponse"]["projectId"], "proj-1")
+        self.assertEqual(task._output_properties["commandResponse"]["success"], "true")
+        self.assertIn("proj-1", task._output_properties["commandResponse"]["output"])
 
         mock_instance.init_metadata.assert_called_once()
         mock_instance.test_connection.assert_called_once()

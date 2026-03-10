@@ -36,8 +36,8 @@ class TestLLMTestConnectionAnthropic(unittest.TestCase):
         task = _make_task({"provider": "anthropic", "apiKey": "sk-test-key"})
         task.execute()
 
-        self.assertEqual(task._output_properties["commandResponse"]["status"], "OK")
-        self.assertEqual(task._output_properties["commandResponse"]["provider"], "anthropic")
+        self.assertEqual(task._output_properties["commandResponse"]["success"], "true")
+        self.assertIn("anthropic", task._output_properties["commandResponse"]["output"])
 
         # Verify curl was called with Anthropic API
         cmd = mock_run.call_args[0][0]
@@ -56,9 +56,9 @@ class TestLLMTestConnectionAnthropic(unittest.TestCase):
         })
         task.execute()
 
-        self.assertEqual(
-            task._output_properties["commandResponse"]["model"],
-            "claude-opus-4-20250514"
+        self.assertIn(
+            "claude-opus-4-20250514",
+            task._output_properties["commandResponse"]["output"],
         )
 
     @patch("subprocess.run")
@@ -86,8 +86,8 @@ class TestLLMTestConnectionOpenAI(unittest.TestCase):
         task = _make_task({"provider": "openai", "apiKey": "sk-openai-key"})
         task.execute()
 
-        self.assertEqual(task._output_properties["commandResponse"]["status"], "OK")
-        self.assertEqual(task._output_properties["commandResponse"]["provider"], "openai")
+        self.assertEqual(task._output_properties["commandResponse"]["success"], "true")
+        self.assertIn("openai", task._output_properties["commandResponse"]["output"])
 
         cmd = mock_run.call_args[0][0]
         self.assertIn("https://api.openai.com/v1/chat/completions", cmd)
@@ -116,9 +116,9 @@ class TestLLMTestConnectionDockerModelRunner(unittest.TestCase):
         task.execute()
 
         resp = task._output_properties["commandResponse"]
-        self.assertEqual(resp["status"], "OK")
-        self.assertEqual(resp["provider"], "docker-model-runner")
-        self.assertEqual(resp["model"], "ai/qwen3-coder")
+        self.assertEqual(resp["success"], "true")
+        self.assertIn("docker-model-runner", resp["output"])
+        self.assertIn("ai/qwen3-coder", resp["output"])
 
         # Verify curl hits the models endpoint (not chat completion)
         cmd = mock_run.call_args[0][0]
@@ -133,7 +133,7 @@ class TestLLMTestConnectionDockerModelRunner(unittest.TestCase):
         task = _make_task({"provider": "docker-model-runner", "apiKey": ""})
         task.execute()  # Should not raise ValueError
 
-        self.assertEqual(task._output_properties["commandResponse"]["status"], "OK")
+        self.assertEqual(task._output_properties["commandResponse"]["success"], "true")
 
     @patch("subprocess.run")
     def test_docker_model_runner_failure(self, mock_run):
@@ -157,9 +157,9 @@ class TestLLMTestConnectionDockerModelRunner(unittest.TestCase):
         })
         task.execute()
 
-        self.assertEqual(
-            task._output_properties["commandResponse"]["model"],
-            "ai/llama3.2"
+        self.assertIn(
+            "ai/llama3.2",
+            task._output_properties["commandResponse"]["output"],
         )
 
     @patch("subprocess.run")
@@ -218,9 +218,9 @@ class TestLLMTestConnectionValidation(unittest.TestCase):
             )
             task = _make_task({"provider": "anthropic", "apiKey": "key"})
             task.execute()
-            self.assertEqual(
-                task._output_properties["commandResponse"]["model"],
-                "claude-sonnet-4-20250514"
+            self.assertIn(
+                "claude-sonnet-4-20250514",
+                task._output_properties["commandResponse"]["output"],
             )
 
 

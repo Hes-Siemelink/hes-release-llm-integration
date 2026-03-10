@@ -36,10 +36,12 @@ class BeadsTestConnection(BaseTask):
 
             if client.test_connection():
                 self.set_output_property("commandResponse", {
-                    "status": "OK",
-                    "host": server.get("host", ""),
-                    "port": str(server.get("port", "")),
-                    "projectId": server.get("projectId", ""),
+                    "success": "true",
+                    "output": (
+                        f"Connected to beads server at "
+                        f"{server.get('host', '')}:{server.get('port', '')} "
+                        f"(project: {server.get('projectId', '')})"
+                    ),
                 })
                 logger.info("Beads server connection successful")
             else:

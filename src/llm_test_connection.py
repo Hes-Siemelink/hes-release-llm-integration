@@ -125,9 +125,8 @@ class LLMTestConnection(BaseTask):
                 raise ValueError(f"Unknown provider: {provider}")
 
             self.set_output_property("commandResponse", {
-                "status": "OK",
-                "provider": provider,
-                "model": model or _DEFAULT_MODELS.get(provider, "(default)"),
+                "success": "true",
+                "output": f"Connected to {provider} (model: {model or _DEFAULT_MODELS.get(provider, '(default)')})",
             })
 
         except Exception as e:
