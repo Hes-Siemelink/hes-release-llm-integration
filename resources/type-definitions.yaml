@@ -76,15 +76,16 @@ types:
         enum-values:
           - anthropic
           - openai
+          - docker-model-runner
       apiKey:
         label: API Key
-        description: API key for the LLM provider
+        description: API key for the LLM provider (not needed for Docker Model Runner)
         kind: string
         password: true
-        required: true
+        required: false
       model:
         label: Model
-        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o). Leave empty for provider default.
+        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o, docker-model-runner/ai/qwen3-coder). Leave empty for provider default.
         kind: string
         required: false
 

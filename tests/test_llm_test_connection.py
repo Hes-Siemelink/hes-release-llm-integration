@@ -103,6 +103,66 @@ class TestLLMTestConnectionOpenAI(unittest.TestCase):
             task.execute()
 
 
+class TestLLMTestConnectionDockerModelRunner(unittest.TestCase):
+    """Test Docker Model Runner connection testing."""
+
+    @patch("subprocess.run")
+    def test_docker_model_runner_success(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='{"data":[{"id":"ai/qwen3-coder"}]}', stderr=""
+        )
+        task = _make_task({"provider": "docker-model-runner"})
+        task.execute()
+
+        resp = task._output_properties["commandResponse"]
+        self.assertEqual(resp["status"], "OK")
+        self.assertEqual(resp["provider"], "docker-model-runner")
+        self.assertEqual(resp["model"], "ai/qwen3-coder")
+
+        # Verify curl hits the models endpoint (not chat completion)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("http://model-runner.docker.internal/engines/v1/models", cmd)
+
+    @patch("subprocess.run")
+    def test_docker_model_runner_no_api_key_needed(self, mock_run):
+        """Docker Model Runner should not require an API key."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="{}", stderr=""
+        )
+        task = _make_task({"provider": "docker-model-runner", "apiKey": ""})
+        task.execute()  # Should not raise ValueError
+
+        self.assertEqual(task._output_properties["commandResponse"]["status"], "OK")
+
+    @patch("subprocess.run")
+    def test_docker_model_runner_failure(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=7, stdout="",
+            stderr="curl: (7) Failed to connect"
+        )
+        task = _make_task({"provider": "docker-model-runner"})
+        with self.assertRaises(RuntimeError) as ctx:
+            task.execute()
+        self.assertIn("LLM connection test failed", str(ctx.exception))
+
+    @patch("subprocess.run")
+    def test_docker_model_runner_with_custom_model(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="{}", stderr=""
+        )
+        task = _make_task({
+            "provider": "docker-model-runner",
+            "model": "ai/llama3.2",
+        })
+        task.execute()
+
+        self.assertEqual(
+            task._output_properties["commandResponse"]["model"],
+            "ai/llama3.2"
+        )
+
+
 class TestLLMTestConnectionValidation(unittest.TestCase):
     """Test input validation."""
 
@@ -117,8 +177,8 @@ class TestLLMTestConnectionValidation(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             task.execute()
 
-    def test_default_model_label(self):
-        """When no model specified, output shows '(default)'."""
+    def test_default_model_shown(self):
+        """When no model specified, output shows the provider's default model."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="{}", stderr=""
@@ -127,7 +187,7 @@ class TestLLMTestConnectionValidation(unittest.TestCase):
             task.execute()
             self.assertEqual(
                 task._output_properties["commandResponse"]["model"],
-                "(default)"
+                "claude-sonnet-4-20250514"
             )
 
 

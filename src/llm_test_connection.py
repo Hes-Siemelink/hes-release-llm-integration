@@ -24,13 +24,17 @@ PROVIDER_ENV_VARS = {
 _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4o-mini",
+    "docker-model-runner": "ai/qwen3-coder",
 }
 
-# API endpoints per provider
+# API endpoints per provider (for chat completion test)
 _API_URLS = {
     "anthropic": "https://api.anthropic.com/v1/messages",
     "openai": "https://api.openai.com/v1/chat/completions",
 }
+
+# Docker Model Runner endpoint (models list -- fast, no inference needed)
+_DOCKER_MODEL_RUNNER_URL = "http://model-runner.docker.internal/engines/v1/models"
 
 
 def _auth_headers(provider: str, api_key: str) -> List[str]:
@@ -62,6 +66,21 @@ def _run_curl_test(url: str, headers: List[str], body: str, provider: str) -> No
         )
 
 
+def _test_docker_model_runner() -> None:
+    """Test Docker Model Runner by listing available models (no inference needed)."""
+    result = subprocess.run(
+        ["curl", "-s", "-f", _DOCKER_MODEL_RUNNER_URL],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Docker Model Runner not reachable: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+
+
 class LLMTestConnection(BaseTask):
     """
     Test connection script for code-agent.LLMServer configuration.
@@ -77,32 +96,36 @@ class LLMTestConnection(BaseTask):
         api_key = server.get("apiKey", "")
         model = server.get("model", "")
 
-        if not api_key:
+        if provider != "docker-model-runner" and not api_key:
             raise ValueError("API key is required")
 
         logger.info(f"Testing connection to {provider} provider...")
 
         try:
-            if provider not in _API_URLS:
+            if provider == "docker-model-runner":
+                _test_docker_model_runner()
+                logger.info("Docker Model Runner connection validated")
+            elif provider in _API_URLS:
+                test_model = model or _DEFAULT_MODELS[provider]
+                body = json.dumps({
+                    "model": test_model,
+                    "max_tokens": 1,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                })
+                _run_curl_test(
+                    _API_URLS[provider],
+                    _auth_headers(provider, api_key),
+                    body,
+                    provider,
+                )
+                logger.info(f"{provider.title()} API key validated (model: {test_model})")
+            else:
                 raise ValueError(f"Unknown provider: {provider}")
-            test_model = model or _DEFAULT_MODELS[provider]
-            body = json.dumps({
-                "model": test_model,
-                "max_tokens": 1,
-                "messages": [{"role": "user", "content": "Hi"}],
-            })
-            _run_curl_test(
-                _API_URLS[provider],
-                _auth_headers(provider, api_key),
-                body,
-                provider,
-            )
-            logger.info(f"{provider.title()} API key validated (model: {test_model})")
 
             self.set_output_property("commandResponse", {
                 "status": "OK",
                 "provider": provider,
-                "model": model or "(default)",
+                "model": model or _DEFAULT_MODELS.get(provider, "(default)"),
             })
 
         except Exception as e:

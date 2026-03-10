@@ -126,7 +126,8 @@ class CreatePullRequest(BaseTask):
             raise ValueError("GitHub token is required")
         if not ctx.beads_server.get("projectId"):
             raise ValueError("Beads Server Project ID is required")
-        if not ctx.llm_server.get("apiKey"):
+        provider = ctx.llm_server.get("provider", "anthropic")
+        if provider != "docker-model-runner" and not ctx.llm_server.get("apiKey"):
             raise ValueError("LLM API key is required")
 
     # -------------------------------------------------------------------
@@ -331,7 +332,10 @@ class CreatePullRequest(BaseTask):
         provider = llm_server.get("provider", "anthropic")
         api_key = llm_server.get("apiKey", "")
 
-        if provider == "anthropic":
+        if provider == "docker-model-runner":
+            # Local model runner -- no API key env var needed
+            pass
+        elif provider == "anthropic":
             env["ANTHROPIC_API_KEY"] = api_key
         elif provider == "openai":
             env["OPENAI_API_KEY"] = api_key

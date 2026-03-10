@@ -84,6 +84,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # Install OpenCode globally
 RUN npm install -g opencode-ai@latest
 
+# Install AI SDK provider for custom/local models (Docker Model Runner, Ollama, etc.)
+RUN npm install -g @ai-sdk/openai-compatible@latest
+
 # Copy bd binary from builder stage
 COPY --from=bd-builder /usr/local/bin/bd /usr/local/bin/bd
 

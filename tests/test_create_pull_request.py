@@ -105,6 +105,14 @@ class TestValidation(unittest.TestCase):
             task.execute()
         self.assertIn("API key", str(ctx.exception))
 
+    def test_docker_model_runner_no_api_key_needed(self):
+        """Docker Model Runner should not require an API key."""
+        task = _make_task({"llmServer": {"provider": "docker-model-runner", "apiKey": ""}})
+        # Should pass validation (will fail later at setup, but not at validation)
+        with self.assertRaises(Exception) as ctx:
+            task.execute()
+        self.assertNotIn("API key", str(ctx.exception))
+
 
 class TestFullPipeline(unittest.TestCase):
     """Test the happy-path pipeline: setup -> code -> deliver."""
@@ -546,6 +554,11 @@ class TestLLMEnv(unittest.TestCase):
         task = _make_task()
         env = task._build_llm_env({"provider": "custom", "apiKey": "key123"})
         self.assertEqual(env, {"ANTHROPIC_API_KEY": "key123"})
+
+    def test_docker_model_runner_env(self):
+        task = _make_task()
+        env = task._build_llm_env({"provider": "docker-model-runner"})
+        self.assertEqual(env, {})
 
 
 class TestPRBody(unittest.TestCase):
