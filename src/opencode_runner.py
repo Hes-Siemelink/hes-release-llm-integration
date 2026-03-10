@@ -93,13 +93,34 @@ def run_opencode(
     cmd = _build_cmd(prompt, workspace_dir, model)
 
     print(f"Invoking OpenCode (timeout={timeout}s)...")
-    print(f"Command: {' '.join(cmd[:6])}...")  # Don't log full prompt
+    print(f"Command: {' '.join(cmd)}")
+    print(f"OPENCODE_CONFIG={env.get('OPENCODE_CONFIG', '(not set)')}")
+    # Print the opencode config contents for debugging
+    config_path = env.get("OPENCODE_CONFIG", "")
+    if config_path and os.path.isfile(config_path):
+        try:
+            with open(config_path, "r") as f:
+                print(f"opencode.json contents:\n{f.read()}")
+        except Exception:
+            pass
+    if env.get("ANTHROPIC_API_KEY"):
+        print("ANTHROPIC_API_KEY=<set>")
+    if env.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY=<set>")
 
     exit_code, output, timed_out = _invoke(cmd, workspace_dir, env, timeout)
 
     needs_answer_bead_id = _check_needs_answer()
 
     print(f"OpenCode exited with code {exit_code}")
+    if output.strip():
+        # Truncate very long output but always show something
+        display = output.strip()
+        if len(display) > 4000:
+            display = display[:2000] + "\n\n... (truncated) ...\n\n" + display[-2000:]
+        print(f"OpenCode output:\n{display}")
+    else:
+        print("OpenCode produced no output")
     if needs_answer_bead_id:
         print(f"Question detected: bead {needs_answer_bead_id}")
 
