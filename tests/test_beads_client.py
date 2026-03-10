@@ -390,7 +390,9 @@ class TestTestConnection(unittest.TestCase):
             args=[], returncode=0, stdout="[]", stderr=""
         )
         client = self._make_client()
-        self.assertTrue(client.test_connection())
+        ok, detail = client.test_connection()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "OK")
 
     @patch("subprocess.run")
     def test_connection_failure(self, mock_run):
@@ -398,13 +400,17 @@ class TestTestConnection(unittest.TestCase):
             args=[], returncode=1, stdout="", stderr="connection refused"
         )
         client = self._make_client()
-        self.assertFalse(client.test_connection())
+        ok, detail = client.test_connection()
+        self.assertFalse(ok)
+        self.assertIn("connection refused", detail)
 
     @patch("subprocess.run")
     def test_connection_timeout(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="bd", timeout=30)
         client = self._make_client()
-        self.assertFalse(client.test_connection())
+        ok, detail = client.test_connection()
+        self.assertFalse(ok)
+        self.assertIn("timed out", detail)
 
 
 if __name__ == "__main__":

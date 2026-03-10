@@ -12,7 +12,7 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -345,10 +345,18 @@ class BeadsClient:
     # Utility
     # ---------------------------------------------------------------------------
 
-    def test_connection(self) -> bool:
-        """Test that bd can reach the beads server."""
+    def test_connection(self) -> Tuple[bool, str]:
+        """Test that bd can reach the beads server.
+
+        Returns:
+            Tuple of (success, detail_message).  On failure the message
+            contains stderr / timeout info for diagnostics.
+        """
         try:
             result = self._run_bd(["ready", "--json"], check=False)
-            return result.returncode == 0
+            if result.returncode == 0:
+                return True, "OK"
+            detail = (result.stderr or result.stdout or "").strip()
+            return False, f"bd exited {result.returncode}: {detail}"
         except subprocess.TimeoutExpired:
-            return False
+            return False, "bd timed out after 30 seconds"

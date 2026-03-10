@@ -85,7 +85,7 @@ types:
         required: false
       url:
         label: URL
-        description: Base URL for the LLM API (required for Docker Model Runner, e.g., http://model-runner.docker.internal/engines/v1)
+        description: Base URL for the LLM API (required for Docker Model Runner, e.g., http://model-runner.docker.internal/)
         kind: string
         required: false
       model:

@@ -28,26 +28,32 @@ class BeadsTestConnection(BaseTask):
         if not server.get("projectId"):
             raise ValueError("Project ID is required")
 
-        logger.info("Testing beads server connection...")
+        host = server.get('host', '(unset)')
+        port = server.get('port', '(unset)')
+        project = server.get('projectId', '(unset)')
+        logger.info(
+            f"Testing beads server connection to {host}:{port} "
+            f"(project: {project})..."
+        )
 
         try:
             client = BeadsClient.from_server_properties(server)
             client.init_metadata()
 
-            if client.test_connection():
+            ok, detail = client.test_connection()
+            if ok:
                 self.set_output_property("commandResponse", {
                     "success": "true",
                     "output": (
-                        f"Connected to beads server at "
-                        f"{server.get('host', '')}:{server.get('port', '')} "
-                        f"(project: {server.get('projectId', '')})"
+                        f"Connected to beads server at {host}:{port} "
+                        f"(project: {project})"
                     ),
                 })
                 logger.info("Beads server connection successful")
             else:
                 raise RuntimeError(
-                    "bd CLI could not connect to the beads server. "
-                    "Check host, port, and that the Dolt server is running."
+                    f"bd CLI could not connect to the beads server at "
+                    f"{host}:{port}. {detail}"
                 )
 
         except Exception as e:

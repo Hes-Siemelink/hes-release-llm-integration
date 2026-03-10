@@ -30,7 +30,7 @@ class TestBeadsTestConnection(unittest.TestCase):
     @patch("src.beads_test_connection.BeadsClient")
     def test_success(self, MockClient):
         mock_instance = MagicMock()
-        mock_instance.test_connection.return_value = True
+        mock_instance.test_connection.return_value = (True, "OK")
         MockClient.from_server_properties.return_value = mock_instance
 
         task = _make_task({
@@ -52,7 +52,7 @@ class TestBeadsTestConnection(unittest.TestCase):
     @patch("src.beads_test_connection.BeadsClient")
     def test_connection_failure(self, MockClient):
         mock_instance = MagicMock()
-        mock_instance.test_connection.return_value = False
+        mock_instance.test_connection.return_value = (False, "bd exited 1: connection refused")
         MockClient.from_server_properties.return_value = mock_instance
 
         task = _make_task({
