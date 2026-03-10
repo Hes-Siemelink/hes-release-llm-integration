@@ -185,7 +185,13 @@ def _load_opencode_template(path: str) -> Dict[str, Any]:
 
 
 def _apply_llm_server_url(config: Dict[str, Any], llm_server: Dict[str, Any]) -> None:
-    """Update the docker-model-runner baseURL if a URL is provided."""
+    """Update the docker-model-runner baseURL if a URL is provided.
+
+    The AI SDK OpenAI-compatible provider requires the full API path
+    (e.g., ``http://model-runner.docker.internal/engines/v1``).  Users
+    typically configure just the base host, so we auto-append
+    ``/engines/v1`` when it's not already present.
+    """
     url = llm_server.get("url", "")
     if not url:
         return
@@ -194,8 +200,26 @@ def _apply_llm_server_url(config: Dict[str, Any], llm_server: Dict[str, Any]) ->
     providers = config.get("provider", {})
 
     if provider == "docker-model-runner" and "docker-model-runner" in providers:
+        url = _ensure_engines_path(url)
         providers["docker-model-runner"].setdefault("options", {})["baseURL"] = url
         print(f"Set docker-model-runner baseURL to {url}")
+
+
+# The path suffix required by the AI SDK OpenAI-compatible provider
+_ENGINES_V1_SUFFIX = "/engines/v1"
+
+
+def _ensure_engines_path(url: str) -> str:
+    """Append ``/engines/v1`` to the URL if not already present.
+
+    Handles trailing slashes so that both
+    ``http://host/`` and ``http://host`` produce
+    ``http://host/engines/v1``.
+    """
+    stripped = url.rstrip("/")
+    if stripped.endswith(_ENGINES_V1_SUFFIX) or stripped.endswith("/engines/v1/"):
+        return url.rstrip("/")
+    return f"{stripped}{_ENGINES_V1_SUFFIX}"
 
 
 def _write_json(path: str, data: Dict[str, Any]) -> None:

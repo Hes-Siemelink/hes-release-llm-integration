@@ -11,6 +11,7 @@ import unittest.mock
 from src.agents_md import (
     BACKUP_SUFFIX,
     SEPARATOR,
+    _ensure_engines_path,
     cleanup_agents_md,
     cleanup_opencode_config,
     inject_agents_md,
@@ -192,7 +193,7 @@ class TestInjectOpencodeConfig(unittest.TestCase):
             self.assertNotEqual(base_url, "http://custom-host:8080")
 
     def test_docker_model_runner_url_injected(self):
-        """URL from llm_server is injected into docker-model-runner baseURL."""
+        """URL from llm_server is injected with /engines/v1 path."""
         import json
         llm_server = {
             "provider": "docker-model-runner",
@@ -206,7 +207,47 @@ class TestInjectOpencodeConfig(unittest.TestCase):
             data = json.load(f)
 
         dmr = data["provider"]["docker-model-runner"]
-        self.assertEqual(dmr["options"]["baseURL"], "http://custom-host:8080")
+        self.assertEqual(dmr["options"]["baseURL"], "http://custom-host:8080/engines/v1")
+
+    def test_docker_model_runner_url_with_trailing_slash(self):
+        """Trailing slash on URL is handled before appending /engines/v1."""
+        import json
+        llm_server = {
+            "provider": "docker-model-runner",
+            "url": "http://model-runner.docker.internal/",
+        }
+        path = inject_opencode_config(
+            self.workspace, self.template_dir, llm_server=llm_server
+        )
+
+        with open(path) as f:
+            data = json.load(f)
+
+        dmr = data["provider"]["docker-model-runner"]
+        self.assertEqual(
+            dmr["options"]["baseURL"],
+            "http://model-runner.docker.internal/engines/v1",
+        )
+
+    def test_docker_model_runner_url_already_has_engines_path(self):
+        """URL that already ends with /engines/v1 is not doubled."""
+        import json
+        llm_server = {
+            "provider": "docker-model-runner",
+            "url": "http://model-runner.docker.internal/engines/v1",
+        }
+        path = inject_opencode_config(
+            self.workspace, self.template_dir, llm_server=llm_server
+        )
+
+        with open(path) as f:
+            data = json.load(f)
+
+        dmr = data["provider"]["docker-model-runner"]
+        self.assertEqual(
+            dmr["options"]["baseURL"],
+            "http://model-runner.docker.internal/engines/v1",
+        )
 
     def test_non_docker_provider_url_ignored(self):
         """URL is not applied when provider is not docker-model-runner."""
@@ -353,6 +394,46 @@ class TestCleanupOpencodeConfig(unittest.TestCase):
         with open(config_path) as f:
             restored = json.load(f)
         self.assertEqual(restored, original_config)
+
+
+class TestEnsureEnginesPath(unittest.TestCase):
+    """Test _ensure_engines_path URL normalization."""
+
+    def test_bare_host(self):
+        self.assertEqual(
+            _ensure_engines_path("http://host:8080"),
+            "http://host:8080/engines/v1",
+        )
+
+    def test_trailing_slash(self):
+        self.assertEqual(
+            _ensure_engines_path("http://host:8080/"),
+            "http://host:8080/engines/v1",
+        )
+
+    def test_already_has_path(self):
+        self.assertEqual(
+            _ensure_engines_path("http://host:8080/engines/v1"),
+            "http://host:8080/engines/v1",
+        )
+
+    def test_already_has_path_trailing_slash(self):
+        self.assertEqual(
+            _ensure_engines_path("http://host:8080/engines/v1/"),
+            "http://host:8080/engines/v1",
+        )
+
+    def test_docker_internal_hostname(self):
+        self.assertEqual(
+            _ensure_engines_path("http://model-runner.docker.internal/"),
+            "http://model-runner.docker.internal/engines/v1",
+        )
+
+    def test_docker_internal_already_correct(self):
+        self.assertEqual(
+            _ensure_engines_path("http://model-runner.docker.internal/engines/v1"),
+            "http://model-runner.docker.internal/engines/v1",
+        )
 
 
 if __name__ == "__main__":
