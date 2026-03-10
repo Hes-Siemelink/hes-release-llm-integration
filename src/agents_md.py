@@ -10,8 +10,6 @@ Also handles cleanup before commit.
 import logging
 import os
 import shutil
-from pathlib import Path
-from string import Template
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -25,24 +23,32 @@ BACKUP_SUFFIX = ".original"
 # Default location of the template inside the container image
 DEFAULT_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "resources")
 
+# Search order for resource files
+_CONTAINER_RESOURCE_DIR = "/app/resources"
 
-def _find_template(template_dir: Optional[str] = None) -> str:
-    """Locate the container-AGENTS.md template file."""
+
+def _find_resource(filename: str, template_dir: Optional[str] = None) -> str:
+    """Locate a resource file by searching standard directories.
+
+    Raises FileNotFoundError if the file cannot be found.
+    """
     search_dirs = []
     if template_dir:
         search_dirs.append(template_dir)
     search_dirs.append(DEFAULT_TEMPLATE_DIR)
-    # Also check /app/resources (container layout)
-    search_dirs.append("/app/resources")
+    search_dirs.append(_CONTAINER_RESOURCE_DIR)
 
     for d in search_dirs:
-        path = os.path.join(d, "container-AGENTS.md")
+        path = os.path.join(d, filename)
         if os.path.isfile(path):
             return path
 
-    raise FileNotFoundError(
-        f"container-AGENTS.md not found in: {search_dirs}"
-    )
+    raise FileNotFoundError(f"{filename} not found in: {search_dirs}")
+
+
+# ---------------------------------------------------------------------------
+# AGENTS.md injection / cleanup
+# ---------------------------------------------------------------------------
 
 
 def inject_agents_md(
@@ -56,42 +62,40 @@ def inject_agents_md(
     If the workspace already has an AGENTS.md, backs it up and appends
     the orchestrator instructions. If not, creates a new one.
 
-    Args:
-        workspace_dir: Path to the cloned repo workspace.
-        bead_id: The bead ID to substitute into the template.
-        template_dir: Optional override for template location.
-
     Returns:
         Path to the written AGENTS.md file.
     """
-    template_path = _find_template(template_dir)
-
-    with open(template_path, "r") as f:
-        template_content = f.read()
-
-    # Substitute ${BEAD_ID} placeholder
-    rendered = template_content.replace("${BEAD_ID}", bead_id)
+    template_path = _find_resource("container-AGENTS.md", template_dir)
+    rendered = _render_template(template_path, bead_id)
 
     agents_md_path = os.path.join(workspace_dir, "AGENTS.md")
+    _write_agents_md(agents_md_path, rendered)
+    return agents_md_path
+
+
+def _render_template(template_path: str, bead_id: str) -> str:
+    """Read template and substitute ${BEAD_ID} placeholders."""
+    with open(template_path, "r") as f:
+        content = f.read()
+    return content.replace("${BEAD_ID}", bead_id)
+
+
+def _write_agents_md(agents_md_path: str, rendered: str) -> None:
+    """Write the rendered content, backing up any existing file."""
     backup_path = agents_md_path + BACKUP_SUFFIX
 
     if os.path.isfile(agents_md_path):
-        # Back up the original
         shutil.copy2(agents_md_path, backup_path)
         logger.info(f"Backed up existing AGENTS.md to {backup_path}")
 
-        # Append orchestrator instructions
         with open(agents_md_path, "a") as f:
             f.write(SEPARATOR)
             f.write(rendered)
         logger.info(f"Appended orchestrator instructions to {agents_md_path}")
     else:
-        # Create new AGENTS.md with just the orchestrator instructions
         with open(agents_md_path, "w") as f:
             f.write(rendered)
         logger.info(f"Created {agents_md_path} with orchestrator instructions")
-
-    return agents_md_path
 
 
 def cleanup_agents_md(workspace_dir: str) -> None:
@@ -106,15 +110,18 @@ def cleanup_agents_md(workspace_dir: str) -> None:
     backup_path = agents_md_path + BACKUP_SUFFIX
 
     if os.path.isfile(backup_path):
-        # Restore original
         shutil.move(backup_path, agents_md_path)
-        logger.info(f"Restored original AGENTS.md from backup")
+        logger.info("Restored original AGENTS.md from backup")
     elif os.path.isfile(agents_md_path):
-        # We created it from scratch -- remove it
         os.remove(agents_md_path)
-        logger.info(f"Removed injected AGENTS.md (no original existed)")
+        logger.info("Removed injected AGENTS.md (no original existed)")
     else:
         logger.debug("No AGENTS.md to clean up")
+
+
+# ---------------------------------------------------------------------------
+# OpenCode config injection
+# ---------------------------------------------------------------------------
 
 
 def inject_opencode_config(
@@ -129,24 +136,7 @@ def inject_opencode_config(
     Returns:
         Path to the written opencode.json file.
     """
-    search_dirs = []
-    if template_dir:
-        search_dirs.append(template_dir)
-    search_dirs.append(DEFAULT_TEMPLATE_DIR)
-    search_dirs.append("/app/resources")
-
-    src_path = None
-    for d in search_dirs:
-        path = os.path.join(d, "container-opencode.json")
-        if os.path.isfile(path):
-            src_path = path
-            break
-
-    if src_path is None:
-        raise FileNotFoundError(
-            f"container-opencode.json not found in: {search_dirs}"
-        )
-
+    src_path = _find_resource("container-opencode.json", template_dir)
     dest_path = os.path.join(workspace_dir, "opencode.json")
     shutil.copy2(src_path, dest_path)
     logger.info(f"Copied opencode.json to {dest_path}")

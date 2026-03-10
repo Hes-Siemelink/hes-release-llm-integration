@@ -40,6 +40,11 @@ def _run(
     return result
 
 
+# ---------------------------------------------------------------------------
+# Git identity and auth
+# ---------------------------------------------------------------------------
+
+
 def configure_git(actor: str, email: str, github_token: str) -> None:
     """
     Configure git identity and GitHub authentication.
@@ -47,17 +52,28 @@ def configure_git(actor: str, email: str, github_token: str) -> None:
     Mirrors setup.sh lines 41-60.
     """
     logger.info(f"Configuring git identity: {actor} <{email}>")
+    _set_git_identity(actor, email)
+    _set_git_token_rewrite(github_token)
+    _verify_gh_auth(github_token)
+
+
+def _set_git_identity(actor: str, email: str) -> None:
+    """Set global git user.name and user.email."""
     _run(["git", "config", "--global", "user.name", actor])
     _run(["git", "config", "--global", "user.email", email])
 
-    # Configure git to use HTTPS with token for clone/push
+
+def _set_git_token_rewrite(github_token: str) -> None:
+    """Configure git to rewrite HTTPS URLs with an embedded token."""
     _run([
         "git", "config", "--global",
         f"url.https://{github_token}@github.com/.insteadOf",
         "https://github.com/",
     ])
 
-    # Verify gh auth via GITHUB_TOKEN env var
+
+def _verify_gh_auth(github_token: str) -> None:
+    """Best-effort check that gh CLI can authenticate."""
     env = os.environ.copy()
     env["GITHUB_TOKEN"] = github_token
     result = _run(["gh", "auth", "status"], check=False, env=env)
@@ -65,6 +81,11 @@ def configure_git(actor: str, email: str, github_token: str) -> None:
         logger.info("GitHub CLI authenticated via GITHUB_TOKEN env var.")
     else:
         logger.warning(f"GitHub CLI auth check returned non-zero: {result.stderr.strip()}")
+
+
+# ---------------------------------------------------------------------------
+# Clone and branch
+# ---------------------------------------------------------------------------
 
 
 def clone_repo(repo_url: str, workspace_dir: str, timeout: int = 600) -> None:
@@ -95,6 +116,14 @@ def create_branch(workspace_dir: str, branch_name: str, base_branch: str = "main
     )
 
 
+# ---------------------------------------------------------------------------
+# Stage, commit, push
+# ---------------------------------------------------------------------------
+
+
+DEFAULT_EXCLUDE_PATTERNS = ["AGENTS.md", ".beads"]
+
+
 def stage_and_commit(
     workspace_dir: str,
     commit_message: str,
@@ -107,15 +136,35 @@ def stage_and_commit(
     Mirrors deliver.sh lines 26-79.
     """
     if exclude_patterns is None:
-        exclude_patterns = ["AGENTS.md", ".beads"]
+        exclude_patterns = DEFAULT_EXCLUDE_PATTERNS
 
-    # First, restore orchestrator artifacts to their original state
-    for pattern in exclude_patterns:
+    _revert_excluded_files(workspace_dir, exclude_patterns)
+
+    if not _has_uncommitted_changes(workspace_dir):
+        logger.warning("No changes detected in workspace")
+        return False
+
+    _stage_all_except(workspace_dir, exclude_patterns)
+
+    if not _has_staged_changes(workspace_dir):
+        logger.warning("No changes remain after excluding orchestrator artifacts")
+        return False
+
+    logger.info(f"Committing: {commit_message}")
+    _run(["git", "commit", "-m", commit_message], cwd=workspace_dir)
+    return True
+
+
+def _revert_excluded_files(workspace_dir: str, patterns: List[str]) -> None:
+    """Restore excluded files to their HEAD state so they won't be committed."""
+    for pattern in patterns:
         _run(["git", "checkout", "--", pattern], cwd=workspace_dir, check=False)
         _run(["git", "restore", "--staged", pattern], cwd=workspace_dir, check=False)
         _run(["git", "rm", "--cached", pattern], cwd=workspace_dir, check=False)
 
-    # Check for actual changes
+
+def _has_uncommitted_changes(workspace_dir: str) -> bool:
+    """Check whether the workspace has any diff or untracked files."""
     diff_result = _run(["git", "diff", "--stat", "HEAD"], cwd=workspace_dir, check=False)
     untracked_result = _run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -126,33 +175,25 @@ def stage_and_commit(
     diff_stat = diff_result.stdout.strip()
     untracked = untracked_result.stdout.strip()
 
-    if not diff_stat and not untracked:
-        logger.warning("No changes detected in workspace")
-        return False
-
-    logger.info(f"Changes detected:\n{diff_stat}")
+    if diff_stat:
+        logger.info(f"Changes detected:\n{diff_stat}")
     if untracked:
         logger.info(f"Untracked files:\n{untracked}")
 
-    # Stage all
-    _run(["git", "add", "-A"], cwd=workspace_dir)
+    return bool(diff_stat or untracked)
 
-    # Unstage orchestrator artifacts
-    for pattern in exclude_patterns:
+
+def _stage_all_except(workspace_dir: str, patterns: List[str]) -> None:
+    """Stage everything, then unstage the excluded patterns."""
+    _run(["git", "add", "-A"], cwd=workspace_dir)
+    for pattern in patterns:
         _run(["git", "reset", "HEAD", "--", pattern], cwd=workspace_dir, check=False)
 
-    # Verify there's still something staged
-    staged_check = _run(
-        ["git", "diff", "--cached", "--quiet"], cwd=workspace_dir, check=False
-    )
-    if staged_check.returncode == 0:
-        logger.warning("No changes remain after excluding orchestrator artifacts")
-        return False
 
-    # Commit
-    logger.info(f"Committing: {commit_message}")
-    _run(["git", "commit", "-m", commit_message], cwd=workspace_dir)
-    return True
+def _has_staged_changes(workspace_dir: str) -> bool:
+    """Return True if there are staged changes ready to commit."""
+    result = _run(["git", "diff", "--cached", "--quiet"], cwd=workspace_dir, check=False)
+    return result.returncode != 0  # non-zero means there are staged changes
 
 
 def push_branch(workspace_dir: str, branch_name: str, timeout: int = 300) -> None:
@@ -168,6 +209,11 @@ def push_branch(workspace_dir: str, branch_name: str, timeout: int = 300) -> Non
         timeout=timeout,
     )
     logger.info("Push complete.")
+
+
+# ---------------------------------------------------------------------------
+# Pull request
+# ---------------------------------------------------------------------------
 
 
 def create_pr(
@@ -203,6 +249,11 @@ def create_pr(
     pr_url = result.stdout.strip()
     logger.info(f"PR created: {pr_url}")
     return pr_url
+
+
+# ---------------------------------------------------------------------------
+# Diff utilities
+# ---------------------------------------------------------------------------
 
 
 def get_diff_stat(workspace_dir: str, ref: str = "HEAD~1 HEAD") -> str:

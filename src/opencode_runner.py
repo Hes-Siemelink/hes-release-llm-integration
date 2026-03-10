@@ -9,9 +9,7 @@ capture, and the needs-answer signal file detection.
 import logging
 import os
 import subprocess
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -45,40 +43,27 @@ def compose_prompt(bead_data: Dict) -> str:
     title = bead_data.get("title", "Untitled")
     description = bead_data.get("description", "")
 
-    prompt = f"""You are working on bead {bead_id}: {title}
-
-## Story
-
-{description}"""
+    sections = [f"You are working on bead {bead_id}: {title}\n\n## Story\n\n{description}"]
 
     design = bead_data.get("design") or ""
     if design:
-        prompt += f"""
-
-## Design Notes
-
-{design}"""
+        sections.append(f"## Design Notes\n\n{design}")
 
     notes = bead_data.get("notes") or ""
     if notes:
-        prompt += f"""
+        sections.append(f"## Additional Notes\n\n{notes}")
 
-## Additional Notes
+    sections.append(
+        "## Instructions\n\n"
+        "1. Read the AGENTS.md file in this workspace for project-specific guidance.\n"
+        "2. Implement the changes described in the story above.\n"
+        "3. Run any available tests to verify your work.\n"
+        "4. If you are blocked and need human input, follow the question protocol in AGENTS.md.\n"
+        "5. Do NOT commit or push -- the orchestrator handles that.\n"
+        "6. When done, simply exit."
+    )
 
-{notes}"""
-
-    prompt += """
-
-## Instructions
-
-1. Read the AGENTS.md file in this workspace for project-specific guidance.
-2. Implement the changes described in the story above.
-3. Run any available tests to verify your work.
-4. If you are blocked and need human input, follow the question protocol in AGENTS.md.
-5. Do NOT commit or push -- the orchestrator handles that.
-6. When done, simply exit."""
-
-    return prompt
+    return "\n\n".join(sections)
 
 
 def run_opencode(
@@ -105,53 +90,16 @@ def run_opencode(
     Returns:
         OpenCodeResult with exit code, output, and needs-answer info
     """
-    # Clear any previous needs-answer signal
-    try:
-        os.remove(NEEDS_ANSWER_FILE)
-    except FileNotFoundError:
-        pass
+    _clear_signal_file()
 
-    # Build environment
-    env = os.environ.copy()
-    env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
-    env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "1"
-    env["OPENCODE_DISABLE_PRUNE"] = "1"
-    env["OPENCODE_CONFIG"] = opencode_config
-
-    if llm_env:
-        env.update(llm_env)
-
-    # Build command
-    cmd = ["opencode", "run", prompt, "--dir", workspace_dir, "--print-logs"]
-    if model:
-        cmd.extend(["-m", model])
+    env = _build_env(opencode_config, llm_env)
+    cmd = _build_cmd(prompt, workspace_dir, model)
 
     logger.info(f"Invoking OpenCode (timeout={timeout}s)...")
     logger.debug(f"Command: {' '.join(cmd[:6])}...")  # Don't log full prompt
 
-    output = ""
-    timed_out = False
-    exit_code = 0
+    exit_code, output, timed_out = _invoke(cmd, workspace_dir, env, timeout)
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-            cwd=workspace_dir,
-        )
-        exit_code = result.returncode
-        output = result.stdout + result.stderr
-
-    except subprocess.TimeoutExpired as e:
-        timed_out = True
-        exit_code = 124  # Match bash timeout exit code
-        output = (e.stdout or "") + (e.stderr or "") if hasattr(e, "stdout") else ""
-        logger.warning(f"OpenCode timed out after {timeout}s")
-
-    # Check for needs-answer signal
     needs_answer_bead_id = _check_needs_answer()
 
     logger.info(f"OpenCode exited with code {exit_code}")
@@ -164,6 +112,64 @@ def run_opencode(
         timed_out=timed_out,
         needs_answer_bead_id=needs_answer_bead_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _clear_signal_file() -> None:
+    """Remove any previous needs-answer signal file."""
+    try:
+        os.remove(NEEDS_ANSWER_FILE)
+    except FileNotFoundError:
+        pass
+
+
+def _build_env(opencode_config: str, llm_env: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Build the environment dict for the OpenCode subprocess."""
+    env = os.environ.copy()
+    env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
+    env["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "1"
+    env["OPENCODE_DISABLE_PRUNE"] = "1"
+    env["OPENCODE_CONFIG"] = opencode_config
+    if llm_env:
+        env.update(llm_env)
+    return env
+
+
+def _build_cmd(prompt: str, workspace_dir: str, model: Optional[str]) -> List[str]:
+    """Build the opencode CLI command list."""
+    cmd = ["opencode", "run", prompt, "--dir", workspace_dir, "--print-logs"]
+    if model:
+        cmd.extend(["-m", model])
+    return cmd
+
+
+def _invoke(
+    cmd: List[str],
+    cwd: str,
+    env: Dict[str, str],
+    timeout: int,
+) -> tuple:
+    """Run the subprocess and return (exit_code, output, timed_out)."""
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+            cwd=cwd,
+        )
+        return result.returncode, result.stdout + result.stderr, False
+
+    except subprocess.TimeoutExpired as e:
+        stdout = str(e.stdout or "") if e.stdout else ""
+        stderr = str(e.stderr or "") if e.stderr else ""
+        logger.warning(f"OpenCode timed out after {timeout}s")
+        return 124, stdout + stderr, True  # 124 matches bash timeout exit code
 
 
 def _check_needs_answer() -> Optional[str]:

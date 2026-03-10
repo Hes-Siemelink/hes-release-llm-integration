@@ -8,7 +8,7 @@ to the configured LLM provider.
 import json
 import logging
 import subprocess
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from digitalai.release.integration import BaseTask
 
@@ -19,6 +19,47 @@ PROVIDER_ENV_VARS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
 }
+
+# Default models per provider (used when no model is specified)
+_DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o-mini",
+}
+
+# API endpoints per provider
+_API_URLS = {
+    "anthropic": "https://api.anthropic.com/v1/messages",
+    "openai": "https://api.openai.com/v1/chat/completions",
+}
+
+
+def _auth_headers(provider: str, api_key: str) -> List[str]:
+    """Build provider-specific auth headers for curl."""
+    if provider == "anthropic":
+        return [
+            "-H", f"x-api-key: {api_key}",
+            "-H", "anthropic-version: 2023-06-01",
+            "-H", "content-type: application/json",
+        ]
+    return [
+        "-H", f"Authorization: Bearer {api_key}",
+        "-H", "Content-Type: application/json",
+    ]
+
+
+def _run_curl_test(url: str, headers: List[str], body: str, provider: str) -> None:
+    """Run a curl request and raise on failure."""
+    result = subprocess.run(
+        ["curl", "-s", "-f", url] + headers + ["-d", body],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{provider.title()} API returned error: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
 
 
 class LLMTestConnection(BaseTask):
@@ -42,12 +83,21 @@ class LLMTestConnection(BaseTask):
         logger.info(f"Testing connection to {provider} provider...")
 
         try:
-            if provider == "anthropic":
-                self._test_anthropic(api_key, model)
-            elif provider == "openai":
-                self._test_openai(api_key, model)
-            else:
+            if provider not in _API_URLS:
                 raise ValueError(f"Unknown provider: {provider}")
+            test_model = model or _DEFAULT_MODELS[provider]
+            body = json.dumps({
+                "model": test_model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "Hi"}],
+            })
+            _run_curl_test(
+                _API_URLS[provider],
+                _auth_headers(provider, api_key),
+                body,
+                provider,
+            )
+            logger.info(f"{provider.title()} API key validated (model: {test_model})")
 
             self.set_output_property("commandResponse", {
                 "status": "OK",
@@ -57,54 +107,3 @@ class LLMTestConnection(BaseTask):
 
         except Exception as e:
             raise RuntimeError(f"LLM connection test failed: {e}") from e
-
-    def _test_anthropic(self, api_key: str, model: str) -> None:
-        """Test Anthropic API by sending a minimal messages request."""
-        test_model = model or "claude-sonnet-4-20250514"
-        result = subprocess.run(
-            [
-                "curl", "-s", "-f",
-                "https://api.anthropic.com/v1/messages",
-                "-H", f"x-api-key: {api_key}",
-                "-H", "anthropic-version: 2023-06-01",
-                "-H", "content-type: application/json",
-                "-d", json.dumps({
-                    "model": test_model,
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                }),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Anthropic API returned error: {result.stderr.strip() or result.stdout.strip()}"
-            )
-        logger.info(f"Anthropic API key validated (model: {test_model})")
-
-    def _test_openai(self, api_key: str, model: str) -> None:
-        """Test OpenAI API by sending a minimal chat completion request."""
-        test_model = model or "gpt-4o-mini"
-        result = subprocess.run(
-            [
-                "curl", "-s", "-f",
-                "https://api.openai.com/v1/chat/completions",
-                "-H", f"Authorization: Bearer {api_key}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps({
-                    "model": test_model,
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                }),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"OpenAI API returned error: {result.stderr.strip() or result.stdout.strip()}"
-            )
-        logger.info(f"OpenAI API key validated (model: {test_model})")
