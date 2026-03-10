@@ -146,7 +146,7 @@ def _build_env(opencode_config: str, llm_env: Optional[Dict[str, str]]) -> Dict[
 
 def _build_cmd(prompt: str, workspace_dir: str, model: Optional[str]) -> List[str]:
     """Build the opencode CLI command list."""
-    cmd = ["opencode", "run", prompt, "--dir", workspace_dir, "--print-logs"]
+    cmd = ["opencode", "run", prompt, "--dir", workspace_dir]
     if model:
         cmd.extend(["-m", model])
     return cmd

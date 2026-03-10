@@ -139,7 +139,7 @@ class TestRunOpencode(unittest.TestCase):
         self.assertIn("run", cmd)
         self.assertIn("--dir", cmd)
         self.assertIn("/workspace", cmd)
-        self.assertIn("--print-logs", cmd)
+        self.assertNotIn("--print-logs", cmd)
 
     @patch(f"{P}._check_needs_answer")
     @patch("os.remove")
