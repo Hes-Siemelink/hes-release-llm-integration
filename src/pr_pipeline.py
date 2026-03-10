@@ -56,6 +56,52 @@ def build_llm_env(llm_server: Dict[str, Any]) -> Dict[str, str]:
     return env
 
 
+# Default models per provider (used when no model is specified)
+_DEFAULT_MODELS: Dict[str, str] = {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o",
+    "docker-model-runner": "ai/qwen3-coder",
+}
+
+
+def normalize_model(provider: str, model: Optional[str]) -> Optional[str]:
+    """Normalize a model identifier to the provider_id/model_id format.
+
+    OpenCode's ``-m`` flag requires the fully-qualified format
+    ``provider_id/model_id``.  Users may configure just the model name
+    (e.g., ``ai/qwen3-coder``) or the bare name (``qwen3-coder``).
+    This function:
+
+    1. Falls back to the provider default when *model* is empty.
+    2. Returns the model as-is when it already starts with ``provider/``.
+    3. Prepends ``provider/`` otherwise.
+
+    For docker-model-runner the model keys include an ``ai/`` namespace
+    (e.g., ``ai/qwen3-coder``).  A bare name like ``qwen3-coder`` is
+    expanded to ``docker-model-runner/ai/qwen3-coder``.
+    """
+    if not model:
+        default = _DEFAULT_MODELS.get(provider)
+        if default:
+            model = default
+            print(f"No model specified, using default for {provider}: {model}")
+        else:
+            return None
+
+    # Already fully qualified (starts with provider/)
+    if model.startswith(f"{provider}/"):
+        return model
+
+    # Docker Model Runner models are keyed as ai/<name>.  If the user
+    # provided just the bare model name (e.g. "qwen3-coder"), prepend "ai/".
+    if provider == "docker-model-runner" and "/" not in model:
+        model = f"ai/{model}"
+
+    qualified = f"{provider}/{model}"
+    print(f"Normalized model: {model} -> {qualified}")
+    return qualified
+
+
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
@@ -86,7 +132,9 @@ def setup_opencode(
     """
     opencode_config = inject_opencode_config(workspace_dir, llm_server=llm_server)
     llm_env = build_llm_env(llm_server)
-    model = llm_server.get("model") or None
+    provider = llm_server.get("provider", "anthropic")
+    raw_model = llm_server.get("model") or None
+    model = normalize_model(provider, raw_model)
     return opencode_config, model, llm_env
 
 

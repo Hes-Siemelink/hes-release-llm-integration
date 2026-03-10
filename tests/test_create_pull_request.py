@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import MagicMock, call, patch
 
 from src.create_pull_request import CreatePullRequest
-from src.pr_pipeline import build_llm_env
+from src.pr_pipeline import build_llm_env, normalize_model
 
 
 def _make_task(overrides=None):
@@ -584,6 +584,69 @@ class TestLLMEnv(unittest.TestCase):
     def test_docker_model_runner_env(self):
         env = build_llm_env({"provider": "docker-model-runner"})
         self.assertEqual(env, {})
+
+
+class TestNormalizeModel(unittest.TestCase):
+    """Test model identifier normalization for OpenCode's -m flag."""
+
+    def test_fully_qualified_anthropic_unchanged(self):
+        """Already fully qualified model is returned as-is."""
+        result = normalize_model("anthropic", "anthropic/claude-sonnet-4-20250514")
+        self.assertEqual(result, "anthropic/claude-sonnet-4-20250514")
+
+    def test_fully_qualified_docker_unchanged(self):
+        """Already fully qualified docker model is returned as-is."""
+        result = normalize_model("docker-model-runner", "docker-model-runner/ai/qwen3-coder")
+        self.assertEqual(result, "docker-model-runner/ai/qwen3-coder")
+
+    def test_bare_anthropic_model_gets_prefix(self):
+        """Bare model name gets provider prefix prepended."""
+        result = normalize_model("anthropic", "claude-sonnet-4-20250514")
+        self.assertEqual(result, "anthropic/claude-sonnet-4-20250514")
+
+    def test_bare_openai_model_gets_prefix(self):
+        result = normalize_model("openai", "gpt-4o")
+        self.assertEqual(result, "openai/gpt-4o")
+
+    def test_docker_model_with_ai_prefix(self):
+        """Docker model with ai/ namespace gets provider prefix."""
+        result = normalize_model("docker-model-runner", "ai/qwen3-coder")
+        self.assertEqual(result, "docker-model-runner/ai/qwen3-coder")
+
+    def test_docker_bare_model_gets_ai_and_provider_prefix(self):
+        """Docker bare model (no ai/) gets both ai/ and provider prefix."""
+        result = normalize_model("docker-model-runner", "qwen3-coder")
+        self.assertEqual(result, "docker-model-runner/ai/qwen3-coder")
+
+    def test_docker_llama_bare_gets_ai_prefix(self):
+        """Another bare docker model gets normalized correctly."""
+        result = normalize_model("docker-model-runner", "llama3.2")
+        self.assertEqual(result, "docker-model-runner/ai/llama3.2")
+
+    def test_empty_model_uses_anthropic_default(self):
+        """Empty model falls back to anthropic default."""
+        result = normalize_model("anthropic", "")
+        self.assertEqual(result, "anthropic/claude-sonnet-4-20250514")
+
+    def test_none_model_uses_openai_default(self):
+        """None model falls back to openai default."""
+        result = normalize_model("openai", None)
+        self.assertEqual(result, "openai/gpt-4o")
+
+    def test_empty_model_uses_docker_default(self):
+        """Empty model falls back to docker-model-runner default."""
+        result = normalize_model("docker-model-runner", "")
+        self.assertEqual(result, "docker-model-runner/ai/qwen3-coder")
+
+    def test_unknown_provider_no_default(self):
+        """Unknown provider with no model returns None."""
+        result = normalize_model("custom-provider", None)
+        self.assertIsNone(result)
+
+    def test_unknown_provider_with_model(self):
+        """Unknown provider with model still gets prefix."""
+        result = normalize_model("custom-provider", "my-model")
+        self.assertEqual(result, "custom-provider/my-model")
 
 
 class TestPRBody(unittest.TestCase):

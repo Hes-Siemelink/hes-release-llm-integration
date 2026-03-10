@@ -90,7 +90,7 @@ types:
         required: false
       model:
         label: Model
-        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o, ai/qwen3-coder). Leave empty for provider default.
+        description: Model name (e.g., claude-sonnet-4-20250514, gpt-4o, ai/qwen3-coder, qwen3-coder). The provider prefix is added automatically. Leave empty for provider default.
         kind: string
         required: false
 
