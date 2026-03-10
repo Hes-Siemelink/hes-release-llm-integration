@@ -5,6 +5,16 @@ Ports beads-coder's setup.sh AGENTS.md injection logic to Python.
 Reads the container-AGENTS.md template from the resources directory,
 substitutes placeholders, and injects it into the cloned workspace.
 Also handles cleanup before commit.
+
+This module handles injection and cleanup of AGENTS.md and opencode.json files
+in containerized workspaces, allowing for proper orchestration of the code
+generation process.
+
+Attributes:
+    SEPARATOR: Separator used when appending to an existing AGENTS.md
+    BACKUP_SUFFIX: Backup suffix for the original AGENTS.md
+    DEFAULT_TEMPLATE_DIR: Default location of the template inside the container image
+    _CONTAINER_RESOURCE_DIR: Search order for resource files
 """
 
 import json
