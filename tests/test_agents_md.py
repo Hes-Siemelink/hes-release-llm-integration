@@ -164,16 +164,94 @@ class TestInjectOpencodeConfig(unittest.TestCase):
         shutil.rmtree(self.workspace)
 
     def test_copies_config(self):
-        """Copies container-opencode.json to workspace."""
+        """Writes container-opencode.json to workspace as valid JSON."""
         path = inject_opencode_config(self.workspace, self.template_dir)
 
         self.assertTrue(os.path.isfile(path))
         self.assertTrue(path.endswith("opencode.json"))
 
+        import json
         with open(path) as f:
-            content = f.read()
-        self.assertIn("permission", content)
-        self.assertIn("allow", content)
+            data = json.load(f)
+        self.assertIn("permission", data)
+
+    def test_no_llm_server_writes_unmodified_config(self):
+        """Without llm_server, config is written without URL changes."""
+        import json
+        path = inject_opencode_config(self.workspace, self.template_dir)
+
+        with open(path) as f:
+            data = json.load(f)
+
+        # docker-model-runner provider should still have original baseURL
+        dmr = data.get("provider", {}).get("docker-model-runner", {})
+        if dmr:
+            base_url = dmr.get("options", {}).get("baseURL", "")
+            # Should be whatever was in the template, not overridden
+            self.assertNotEqual(base_url, "http://custom-host:8080")
+
+    def test_docker_model_runner_url_injected(self):
+        """URL from llm_server is injected into docker-model-runner baseURL."""
+        import json
+        llm_server = {
+            "provider": "docker-model-runner",
+            "url": "http://custom-host:8080",
+        }
+        path = inject_opencode_config(
+            self.workspace, self.template_dir, llm_server=llm_server
+        )
+
+        with open(path) as f:
+            data = json.load(f)
+
+        dmr = data["provider"]["docker-model-runner"]
+        self.assertEqual(dmr["options"]["baseURL"], "http://custom-host:8080")
+
+    def test_non_docker_provider_url_ignored(self):
+        """URL is not applied when provider is not docker-model-runner."""
+        import json
+        llm_server = {
+            "provider": "anthropic",
+            "url": "http://custom-host:8080",
+            "apiKey": "sk-test",
+        }
+        path = inject_opencode_config(
+            self.workspace, self.template_dir, llm_server=llm_server
+        )
+
+        with open(path) as f:
+            data = json.load(f)
+
+        # anthropic provider should not have baseURL set to custom URL
+        anthropic = data.get("provider", {}).get("anthropic", {})
+        base_url = anthropic.get("options", {}).get("baseURL", "")
+        self.assertNotEqual(base_url, "http://custom-host:8080")
+
+    def test_empty_url_not_applied(self):
+        """Empty URL string does not modify the config."""
+        import json
+        llm_server = {
+            "provider": "docker-model-runner",
+            "url": "",
+        }
+        path = inject_opencode_config(
+            self.workspace, self.template_dir, llm_server=llm_server
+        )
+
+        # Read template for comparison
+        template_path = os.path.join(self.template_dir, "container-opencode.json")
+        with open(template_path) as f:
+            original = json.load(f)
+        with open(path) as f:
+            written = json.load(f)
+
+        # docker-model-runner config should be unchanged
+        orig_dmr = original.get("provider", {}).get("docker-model-runner", {})
+        written_dmr = written.get("provider", {}).get("docker-model-runner", {})
+        self.assertEqual(
+            orig_dmr.get("options", {}).get("baseURL"),
+            written_dmr.get("options", {}).get("baseURL"),
+        )
 
     @unittest.mock.patch("src.agents_md.DEFAULT_TEMPLATE_DIR", "/also-nonexistent")
     def test_config_not_found(self):

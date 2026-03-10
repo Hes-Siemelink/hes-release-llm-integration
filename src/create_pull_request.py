@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 from digitalai.release.integration import BaseTask
 
-from src.agents_md import cleanup_agents_md, inject_agents_md
+from src.agents_md import cleanup_agents_md, inject_agents_md, inject_opencode_config
 from src.beads_client import BeadsClient
 from src.git_ops import (
     clone_repo,
@@ -29,7 +29,7 @@ from src.git_ops import (
     push_branch,
     stage_and_commit,
 )
-from src.opencode_runner import OpenCodeResult, compose_prompt, run_opencode
+from src.opencode_runner import DEFAULT_OPENCODE_CONFIG, OpenCodeResult, compose_prompt, run_opencode
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ class PipelineContext:
     branch_name: str = ""
     model: Optional[str] = None
     llm_env: Dict[str, str] = None  # type: ignore[assignment]
+    opencode_config: Optional[str] = None
 
 
 class CreatePullRequest(BaseTask):
@@ -158,6 +159,7 @@ class CreatePullRequest(BaseTask):
         ctx.client.add_comment(ctx.bead_id, f"Claimed by Release task. Branch: {ctx.branch_name}")
 
         inject_agents_md(ctx.workspace, ctx.bead_id)
+        ctx.opencode_config = inject_opencode_config(ctx.workspace, llm_server=ctx.llm_server)
 
         ctx.llm_env = self._build_llm_env(ctx.llm_server)
         ctx.model = ctx.llm_server.get("model") or None
@@ -178,6 +180,7 @@ class CreatePullRequest(BaseTask):
             workspace_dir=ctx.workspace,
             model=ctx.model,
             timeout=ctx.opencode_timeout,
+            opencode_config=ctx.opencode_config or DEFAULT_OPENCODE_CONFIG,
             llm_env=ctx.llm_env,
         )
 
@@ -220,6 +223,7 @@ class CreatePullRequest(BaseTask):
                 workspace_dir=ctx.workspace,
                 model=ctx.model,
                 timeout=ctx.opencode_timeout,
+                opencode_config=ctx.opencode_config or DEFAULT_OPENCODE_CONFIG,
                 llm_env=ctx.llm_env,
             )
 

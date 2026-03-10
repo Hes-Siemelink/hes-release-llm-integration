@@ -66,17 +66,18 @@ def _run_curl_test(url: str, headers: List[str], body: str, provider: str) -> No
         )
 
 
-def _test_docker_model_runner() -> None:
+def _test_docker_model_runner(url: str = "") -> None:
     """Test Docker Model Runner by listing available models (no inference needed)."""
+    endpoint = url.rstrip("/") + "/engines/v1/models" if url else _DOCKER_MODEL_RUNNER_URL
     result = subprocess.run(
-        ["curl", "-s", "-f", _DOCKER_MODEL_RUNNER_URL],
+        ["curl", "-s", "-f", endpoint],
         capture_output=True,
         text=True,
         timeout=10,
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Docker Model Runner not reachable: "
+            f"Docker Model Runner not reachable at {endpoint}: "
             f"{result.stderr.strip() or result.stdout.strip()}"
         )
 
@@ -95,6 +96,7 @@ class LLMTestConnection(BaseTask):
         provider = server.get("provider", "anthropic")
         api_key = server.get("apiKey", "")
         model = server.get("model", "")
+        url = server.get("url", "")
 
         if provider != "docker-model-runner" and not api_key:
             raise ValueError("API key is required")
@@ -103,7 +105,7 @@ class LLMTestConnection(BaseTask):
 
         try:
             if provider == "docker-model-runner":
-                _test_docker_model_runner()
+                _test_docker_model_runner(url=url)
                 logger.info("Docker Model Runner connection validated")
             elif provider in _API_URLS:
                 test_model = model or _DEFAULT_MODELS[provider]

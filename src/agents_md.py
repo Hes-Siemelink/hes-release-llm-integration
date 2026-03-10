@@ -7,10 +7,11 @@ substitutes placeholders, and injects it into the cloned workspace.
 Also handles cleanup before commit.
 """
 
+import json
 import logging
 import os
 import shutil
-from typing import Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -127,17 +128,51 @@ def cleanup_agents_md(workspace_dir: str) -> None:
 def inject_opencode_config(
     workspace_dir: str,
     template_dir: Optional[str] = None,
+    llm_server: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Copy container-opencode.json into the workspace as opencode.json.
 
-    This ensures OpenCode runs with permission: allow in the container.
+    If llm_server provides a URL for docker-model-runner, updates the
+    baseURL in the provider config so OpenCode can reach the endpoint.
 
     Returns:
         Path to the written opencode.json file.
     """
     src_path = _find_resource("container-opencode.json", template_dir)
     dest_path = os.path.join(workspace_dir, "opencode.json")
-    shutil.copy2(src_path, dest_path)
-    logger.info(f"Copied opencode.json to {dest_path}")
+
+    config = _load_opencode_template(src_path)
+    if llm_server:
+        _apply_llm_server_url(config, llm_server)
+    _write_json(dest_path, config)
+
+    logger.info(f"Wrote opencode.json to {dest_path}")
     return dest_path
+
+
+def _load_opencode_template(path: str) -> Dict[str, Any]:
+    """Read the opencode config template as a dict."""
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _apply_llm_server_url(config: Dict[str, Any], llm_server: Dict[str, Any]) -> None:
+    """Update the docker-model-runner baseURL if a URL is provided."""
+    url = llm_server.get("url", "")
+    if not url:
+        return
+
+    provider = llm_server.get("provider", "")
+    providers = config.get("provider", {})
+
+    if provider == "docker-model-runner" and "docker-model-runner" in providers:
+        providers["docker-model-runner"].setdefault("options", {})["baseURL"] = url
+        logger.info(f"Set docker-model-runner baseURL to {url}")
+
+
+def _write_json(path: str, data: Dict[str, Any]) -> None:
+    """Write a dict as formatted JSON."""
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")

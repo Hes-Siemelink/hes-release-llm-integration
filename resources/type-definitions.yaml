@@ -83,9 +83,14 @@ types:
         kind: string
         password: true
         required: false
+      url:
+        label: URL
+        description: Base URL for the LLM API (required for Docker Model Runner, e.g., http://model-runner.docker.internal/engines/v1)
+        kind: string
+        required: false
       model:
         label: Model
-        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o, docker-model-runner/ai/qwen3-coder). Leave empty for provider default.
+        description: Model identifier (e.g., claude-sonnet-4-20250514, gpt-4o, ai/qwen3-coder). Leave empty for provider default.
         kind: string
         required: false
 

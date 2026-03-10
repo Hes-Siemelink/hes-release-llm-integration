@@ -124,6 +124,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -136,6 +137,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -200,6 +202,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -212,6 +215,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -237,6 +241,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -249,6 +254,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -269,6 +275,7 @@ class TestOpenCodeFailure(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -281,6 +288,7 @@ class TestOpenCodeFailure(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -308,6 +316,7 @@ class TestOpenCodeFailure(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -320,6 +329,7 @@ class TestOpenCodeFailure(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -358,6 +368,7 @@ class TestQuestionLoop(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -372,6 +383,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -424,6 +436,7 @@ class TestQuestionLoop(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -438,6 +451,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -487,6 +501,7 @@ class TestQuestionLoop(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -501,6 +516,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,
@@ -583,6 +599,7 @@ class TestQuestionBeadClosed(unittest.TestCase):
     @patch(f"{P}.cleanup_agents_md")
     @patch(f"{P}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
+    @patch(f"{P}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{P}.inject_agents_md", return_value="/workspace/AGENTS.md")
     @patch(f"{P}.create_branch")
     @patch(f"{P}.clone_repo")
@@ -597,6 +614,7 @@ class TestQuestionBeadClosed(unittest.TestCase):
         mock_clone,
         mock_create_branch,
         mock_inject,
+        mock_inject_oc_config,
         mock_compose,
         mock_run_oc,
         mock_cleanup,

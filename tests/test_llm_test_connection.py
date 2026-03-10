@@ -162,6 +162,39 @@ class TestLLMTestConnectionDockerModelRunner(unittest.TestCase):
             "ai/llama3.2"
         )
 
+    @patch("subprocess.run")
+    def test_docker_model_runner_with_custom_url(self, mock_run):
+        """Custom URL is used for the models endpoint."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='{"data":[{"id":"ai/qwen3-coder"}]}', stderr=""
+        )
+        task = _make_task({
+            "provider": "docker-model-runner",
+            "url": "http://custom-host:8080",
+        })
+        task.execute()
+
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("http://custom-host:8080/engines/v1/models", cmd)
+        self.assertNotIn("model-runner.docker.internal", " ".join(cmd))
+
+    @patch("subprocess.run")
+    def test_docker_model_runner_empty_url_uses_default(self, mock_run):
+        """Empty URL falls back to the default Docker Model Runner endpoint."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='{"data":[{"id":"ai/qwen3-coder"}]}', stderr=""
+        )
+        task = _make_task({
+            "provider": "docker-model-runner",
+            "url": "",
+        })
+        task.execute()
+
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("http://model-runner.docker.internal/engines/v1/models", cmd)
+
 
 class TestLLMTestConnectionValidation(unittest.TestCase):
     """Test input validation."""
