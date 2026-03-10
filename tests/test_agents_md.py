@@ -12,6 +12,7 @@ from src.agents_md import (
     BACKUP_SUFFIX,
     SEPARATOR,
     cleanup_agents_md,
+    cleanup_opencode_config,
     inject_agents_md,
     inject_opencode_config,
 )
@@ -253,11 +254,105 @@ class TestInjectOpencodeConfig(unittest.TestCase):
             written_dmr.get("options", {}).get("baseURL"),
         )
 
+    def test_backs_up_existing_opencode_json(self):
+        """Backs up existing opencode.json before overwriting."""
+        import json
+        original_config = {"$schema": "test", "mcp": {"my-server": {"url": "http://localhost:8080"}}}
+        config_path = os.path.join(self.workspace, "opencode.json")
+        with open(config_path, "w") as f:
+            json.dump(original_config, f)
+
+        inject_opencode_config(self.workspace, self.template_dir)
+
+        # Backup should exist with original content
+        backup_path = config_path + BACKUP_SUFFIX
+        self.assertTrue(os.path.isfile(backup_path))
+        with open(backup_path) as f:
+            backup_data = json.load(f)
+        self.assertEqual(backup_data, original_config)
+
+    def test_no_backup_when_no_existing_config(self):
+        """No backup created when workspace has no opencode.json."""
+        inject_opencode_config(self.workspace, self.template_dir)
+
+        backup_path = os.path.join(self.workspace, "opencode.json" + BACKUP_SUFFIX)
+        self.assertFalse(os.path.isfile(backup_path))
+
     @unittest.mock.patch("src.agents_md.DEFAULT_TEMPLATE_DIR", "/also-nonexistent")
     def test_config_not_found(self):
         """Raises FileNotFoundError when config is missing."""
         with self.assertRaises(FileNotFoundError):
             inject_opencode_config(self.workspace, template_dir="/nonexistent")
+
+
+class TestCleanupOpencodeConfig(unittest.TestCase):
+    """Test cleanup_opencode_config function."""
+
+    def setUp(self):
+        self.workspace = tempfile.mkdtemp()
+        self.template_dir = os.path.join(
+            os.path.dirname(__file__), "..", "resources"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.workspace)
+
+    def test_cleanup_restores_backup(self):
+        """Restores original opencode.json from backup."""
+        import json
+        original_config = {"$schema": "test", "mcp": {"my-server": {"url": "http://localhost"}}}
+        config_path = os.path.join(self.workspace, "opencode.json")
+        backup_path = config_path + BACKUP_SUFFIX
+
+        with open(backup_path, "w") as f:
+            json.dump(original_config, f)
+        with open(config_path, "w") as f:
+            json.dump({"injected": True}, f)
+
+        cleanup_opencode_config(self.workspace)
+
+        with open(config_path) as f:
+            restored = json.load(f)
+        self.assertEqual(restored, original_config)
+        self.assertFalse(os.path.isfile(backup_path))
+
+    def test_cleanup_removes_created_file(self):
+        """Removes opencode.json when it was created from scratch (no backup)."""
+        config_path = os.path.join(self.workspace, "opencode.json")
+        with open(config_path, "w") as f:
+            f.write('{"injected": true}')
+
+        cleanup_opencode_config(self.workspace)
+
+        self.assertFalse(os.path.isfile(config_path))
+
+    def test_cleanup_noop_when_no_file(self):
+        """Does nothing when there's no opencode.json at all."""
+        cleanup_opencode_config(self.workspace)
+
+    def test_full_roundtrip(self):
+        """Inject then cleanup restores original opencode.json."""
+        import json
+        original_config = {"$schema": "test", "mcp": {"goals-app": {"url": "http://localhost:8080"}}}
+        config_path = os.path.join(self.workspace, "opencode.json")
+        with open(config_path, "w") as f:
+            json.dump(original_config, f)
+
+        # Inject
+        inject_opencode_config(self.workspace, self.template_dir)
+
+        # Verify injection overwrote the file
+        with open(config_path) as f:
+            injected = json.load(f)
+        self.assertNotEqual(injected, original_config)
+
+        # Cleanup
+        cleanup_opencode_config(self.workspace)
+
+        # Verify restoration
+        with open(config_path) as f:
+            restored = json.load(f)
+        self.assertEqual(restored, original_config)
 
 
 if __name__ == "__main__":

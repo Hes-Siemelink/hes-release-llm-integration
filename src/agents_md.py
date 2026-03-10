@@ -120,6 +120,27 @@ def cleanup_agents_md(workspace_dir: str) -> None:
         logger.debug("No AGENTS.md to clean up")
 
 
+def cleanup_opencode_config(workspace_dir: str) -> None:
+    """
+    Restore the original opencode.json before committing.
+
+    If a backup exists, restores it. If no backup (meaning the repo had
+    no opencode.json), removes the injected file so the commit doesn't
+    include orchestrator artifacts.
+    """
+    config_path = os.path.join(workspace_dir, "opencode.json")
+    backup_path = config_path + BACKUP_SUFFIX
+
+    if os.path.isfile(backup_path):
+        shutil.move(backup_path, config_path)
+        logger.info("Restored original opencode.json from backup")
+    elif os.path.isfile(config_path):
+        os.remove(config_path)
+        logger.info("Removed injected opencode.json (no original existed)")
+    else:
+        logger.debug("No opencode.json to clean up")
+
+
 # ---------------------------------------------------------------------------
 # OpenCode config injection
 # ---------------------------------------------------------------------------
@@ -133,6 +154,9 @@ def inject_opencode_config(
     """
     Copy container-opencode.json into the workspace as opencode.json.
 
+    If the workspace already has an opencode.json, backs it up so that
+    ``cleanup_opencode_config`` can restore it before committing.
+
     If llm_server provides a URL for docker-model-runner, updates the
     baseURL in the provider config so OpenCode can reach the endpoint.
 
@@ -141,6 +165,12 @@ def inject_opencode_config(
     """
     src_path = _find_resource("container-opencode.json", template_dir)
     dest_path = os.path.join(workspace_dir, "opencode.json")
+    backup_path = dest_path + BACKUP_SUFFIX
+
+    # Back up existing opencode.json so we can restore it later
+    if os.path.isfile(dest_path):
+        shutil.copy2(dest_path, backup_path)
+        logger.info(f"Backed up existing opencode.json to {backup_path}")
 
     config = _load_opencode_template(src_path)
     if llm_server:

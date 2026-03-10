@@ -121,7 +121,7 @@ def create_branch(workspace_dir: str, branch_name: str, base_branch: str = "main
 # ---------------------------------------------------------------------------
 
 
-DEFAULT_EXCLUDE_PATTERNS = ["AGENTS.md", ".beads"]
+DEFAULT_EXCLUDE_PATTERNS = ["AGENTS.md", ".beads", "opencode.json"]
 
 
 def stage_and_commit(

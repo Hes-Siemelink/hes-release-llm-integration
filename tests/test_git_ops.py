@@ -153,7 +153,7 @@ class TestStageAndCommit(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_only_orchestrator_artifacts(self, mock_run):
-        """If all changes are in AGENTS.md/.beads, commit should be skipped."""
+        """If all changes are in AGENTS.md/.beads/opencode.json, commit should be skipped."""
         call_count = [0]
 
         def side_effect(cmd, **kwargs):

@@ -123,6 +123,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="3 files changed, 50 insertions(+)")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
@@ -143,6 +144,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_compose,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -199,6 +201,7 @@ class TestFullPipeline(unittest.TestCase):
         # Verify final sync
         client.sync_push.assert_called()
 
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.stage_and_commit", return_value=False)
     @patch(f"{PP}.run_opencode")
@@ -221,6 +224,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_run_oc,
         mock_stage_commit,
         mock_cleanup,
+        mock_cleanup_oc,
     ):
         client = MagicMock()
         client.show_bead.return_value = BEAD_DATA.copy()
@@ -270,6 +274,7 @@ class TestFullPipeline(unittest.TestCase):
 class TestOpenCodeFailure(unittest.TestCase):
     """Test OpenCode error handling."""
 
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.stage_and_commit", return_value=False)
     @patch(f"{PP}.run_opencode")
@@ -292,6 +297,7 @@ class TestOpenCodeFailure(unittest.TestCase):
         mock_run_oc,
         mock_stage_commit,
         mock_cleanup,
+        mock_cleanup_oc,
     ):
         client = MagicMock()
         client.show_bead.return_value = BEAD_DATA.copy()
@@ -313,6 +319,7 @@ class TestOpenCodeFailure(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
@@ -333,6 +340,7 @@ class TestOpenCodeFailure(unittest.TestCase):
         mock_compose,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -365,6 +373,7 @@ class TestQuestionLoop(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="2 files changed")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
@@ -387,6 +396,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_compose,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -433,6 +443,7 @@ class TestQuestionLoop(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
@@ -455,6 +466,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_compose,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -498,6 +510,7 @@ class TestQuestionLoop(unittest.TestCase):
             "Question timed out after 10s. Agent proceeding with best judgment.",
         )
 
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.stage_and_commit", return_value=False)
     @patch(f"{PP}.run_opencode")
@@ -522,6 +535,7 @@ class TestQuestionLoop(unittest.TestCase):
         mock_run_oc,
         mock_stage_commit,
         mock_cleanup,
+        mock_cleanup_oc,
     ):
         mock_time.sleep = MagicMock()
 
@@ -591,6 +605,7 @@ class TestQuestionBeadClosed(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{P}.compose_prompt", return_value="test prompt")
@@ -613,6 +628,7 @@ class TestQuestionBeadClosed(unittest.TestCase):
         mock_compose,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,

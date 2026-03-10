@@ -14,7 +14,7 @@ Extracts the common orchestration steps used by both CreatePullRequest
 import logging
 from typing import Any, Dict, Optional
 
-from src.agents_md import cleanup_agents_md, inject_opencode_config
+from src.agents_md import cleanup_agents_md, cleanup_opencode_config, inject_opencode_config
 from src.git_ops import (
     clone_repo,
     configure_git,
@@ -136,6 +136,7 @@ def deliver_pr(
     Returns the PR URL, or None if no changes were produced.
     """
     cleanup_agents_md(workspace_dir)
+    cleanup_opencode_config(workspace_dir)
 
     has_changes = stage_and_commit(workspace_dir, commit_message)
     if not has_changes:

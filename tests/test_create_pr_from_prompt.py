@@ -115,6 +115,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="2 files changed, 30 insertions(+)")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
@@ -129,6 +130,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_inject_oc_config,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -166,6 +168,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_push.assert_called_once()
         mock_create_pr.assert_called_once()
 
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.stage_and_commit", return_value=False)
     @patch(f"{PP}.run_opencode")
@@ -182,6 +185,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_run_oc,
         mock_stage_commit,
         mock_cleanup,
+        mock_cleanup_oc,
     ):
         oc_result = MagicMock()
         oc_result.exit_code = 0
@@ -221,6 +225,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{PP}.push_branch")
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.cleanup_agents_md")
     @patch(f"{PP}.run_opencode")
     @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
@@ -235,6 +240,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_inject_oc_config,
         mock_run_oc,
         mock_cleanup,
+        mock_cleanup_oc,
         mock_diff_stat,
         mock_stage_commit,
         mock_push,
@@ -257,6 +263,7 @@ class TestFullPipeline(unittest.TestCase):
     @patch(f"{PP}.stage_and_commit", return_value=True)
     @patch(f"{PP}.get_diff_stat", return_value="1 file changed")
     @patch(f"{PP}.cleanup_agents_md")
+    @patch(f"{PP}.cleanup_opencode_config")
     @patch(f"{PP}.run_opencode")
     @patch(f"{PP}.inject_opencode_config", return_value="/workspace/opencode.json")
     @patch(f"{PP}.create_branch")
@@ -269,6 +276,7 @@ class TestFullPipeline(unittest.TestCase):
         mock_create_branch,
         mock_inject_oc_config,
         mock_run_oc,
+        mock_cleanup_oc,
         mock_cleanup,
         mock_diff_stat,
         mock_stage_commit,
