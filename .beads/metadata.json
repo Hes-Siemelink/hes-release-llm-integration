@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "hes_release_llm_integration",
+  "project_id": "ff117b48-8acb-486e-90e3-4cb273dd03ee"
+}

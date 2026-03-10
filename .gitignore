@@ -38,3 +38,7 @@ venv
 
 # Temp files
 out.yaml
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
